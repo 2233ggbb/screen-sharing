@@ -1,0 +1,146 @@
+import { logger } from '../../utils/logger';
+import { STREAM_CONSTRAINTS } from '../../utils/constants';
+
+export interface DesktopSource {
+  id: string;
+  name: string;
+  thumbnail: string;
+  display_id?: string;
+  appIcon?: string;
+}
+
+/**
+ * 屏幕捕获服务
+ */
+export class ScreenCaptureService {
+  private currentStream: MediaStream | null = null;
+
+  /**
+   * 获取可用的屏幕和窗口源
+   */
+  async getSources(): Promise<DesktopSource[]> {
+    try {
+      const sources = await window.electron.getDesktopSources({
+        types: ['screen', 'window'],
+        thumbnailSize: { width: 300, height: 200 },
+      });
+
+      return sources.map((source) => ({
+        id: source.id,
+        name: source.name,
+        thumbnail: source.thumbnail.toDataURL(),
+        display_id: source.display_id,
+        appIcon: source.appIcon?.toDataURL(),
+      }));
+    } catch (error) {
+      logger.error('获取桌面源失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 从指定源创建媒体流
+   */
+  async getStreamFromSource(sourceId: string): Promise<MediaStream> {
+    try {
+      // 停止之前的流
+      this.stopCurrentStream();
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          // @ts-ignore - Electron特定的约束
+          mandatory: {
+            chromeMediaSource: 'desktop',
+            chromeMediaSourceId: sourceId,
+            minWidth: 1280,
+            maxWidth: 1920,
+            minHeight: 720,
+            maxHeight: 1080,
+            minFrameRate: 15,
+            maxFrameRate: 30,
+          },
+        },
+      } as any);
+
+      this.currentStream = stream;
+      logger.info('成功获取屏幕流:', { sourceId, tracks: stream.getTracks().length });
+      return stream;
+    } catch (error) {
+      logger.error('获取屏幕流失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 停止当前流
+   */
+  stopCurrentStream(): void {
+    if (this.currentStream) {
+      this.currentStream.getTracks().forEach((track) => {
+        track.stop();
+        logger.debug('停止track:', track.kind);
+      });
+      this.currentStream = null;
+      logger.info('屏幕流已停止');
+    }
+  }
+
+  /**
+   * 获取当前流
+   */
+  getCurrentStream(): MediaStream | null {
+    return this.currentStream;
+  }
+
+  /**
+   * 调整流质量
+   */
+  async adjustStreamQuality(
+    stream: MediaStream,
+    options: {
+      width?: number;
+      height?: number;
+      frameRate?: number;
+    }
+  ): Promise<void> {
+    const videoTrack = stream.getVideoTracks()[0];
+    if (!videoTrack) {
+      logger.warn('没有视频轨道');
+      return;
+    }
+
+    try {
+      await videoTrack.applyConstraints({
+        width: options.width,
+        height: options.height,
+        frameRate: options.frameRate,
+      });
+      logger.info('调整流质量成功:', options);
+    } catch (error) {
+      logger.error('调整流质量失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取流统计信息
+   */
+  getStreamStats(stream: MediaStream): {
+    videoTracks: number;
+    audioTracks: number;
+    videoSettings?: MediaTrackSettings;
+  } {
+    const videoTracks = stream.getVideoTracks();
+    const audioTracks = stream.getAudioTracks();
+
+    return {
+      videoTracks: videoTracks.length,
+      audioTracks: audioTracks.length,
+      videoSettings: videoTracks[0]?.getSettings(),
+    };
+  }
+}
+
+// 导出单例
+export const screenCaptureService = new ScreenCaptureService();

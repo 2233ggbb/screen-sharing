@@ -1,0 +1,106 @@
+.video-grid-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #fff;
+}
+
+.video-grid {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  flex: 1;
+  width: 100%;
+  align-content: center;
+  
+  // 2x2 网格布局（1-4个屏幕）
+  &.grid-2x2 {
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+  }
+  
+  // 3x3 网格布局（5-9个屏幕）
+  &.grid-3x3 {
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+  }
+  
+  // 4x4 网格布局（10个以上屏幕）
+  &.grid-4x4 {
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(4, 1fr);
+  }
+  
+  .grid-item {
+    background: #000;
+    border-radius: 4px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.2s;
+    min-height: 0;
+    
+    &:hover {
+      transform: scale(1.02);
+    }
+  }
+}
+
+.video-grid-focus {
+  display: flex;
+  height: 100%;
+  gap: 8px;
+  padding: 8px;
+  
+  .focus-main {
+    flex: 1;
+    background: #000;
+    border-radius: 4px;
+    overflow: hidden;
+    cursor: pointer;
+  }
+  
+  .focus-sidebar {
+    width: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    
+    .sidebar-item {
+      height: 150px;
+      background: #000;
+      border-radius: 4px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.2s;
+      
+      &:hover {
+        transform: scale(1.05);
+      }
+    }
+  }
+}
+
+.video-player {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  
+  .video-element {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  
+  .video-nickname {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+}
