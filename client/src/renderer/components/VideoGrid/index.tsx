@@ -57,7 +57,9 @@ const VideoGrid: React.FC = () => {
   // 网格模式 - 根据屏幕数量动态调整
   const getGridClass = () => {
     const count = streams.length;
-    if (count <= 4) {
+    if (count === 1) {
+      return 'video-grid grid-1x1';
+    } else if (count <= 4) {
       return 'video-grid grid-2x2';
     } else if (count <= 9) {
       return 'video-grid grid-3x3';

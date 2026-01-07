@@ -21,7 +21,7 @@ interface ControlsProps {
 
 const Controls: React.FC<ControlsProps> = ({ roomId, onLeave, onStartSharing }) => {
   const { userId } = useUserStore();
-  const { localStream, setLocalStream, addStream } = useStreamStore();
+  const { localStream, setLocalStream, addStream, removeStream } = useStreamStore();
   const [isSharing, setIsSharing] = useState(false);
   const [sourceModalVisible, setSourceModalVisible] = useState(false);
   const [sources, setSources] = useState<DesktopSource[]>([]);
@@ -114,6 +114,9 @@ const Controls: React.FC<ControlsProps> = ({ roomId, onLeave, onStartSharing }) 
       screenCaptureService.stopCurrentStream();
       setLocalStream(null);
       setIsSharing(false);
+
+      // 从视频网格中移除自己的视频流
+      removeStream(userId);
 
       // 通知服务器停止共享
       await socketService.stopSharing();

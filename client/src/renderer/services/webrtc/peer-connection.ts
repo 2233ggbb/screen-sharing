@@ -1,5 +1,6 @@
 import { RTC_CONFIG } from '../../utils/constants';
 import { logger } from '../../utils/logger';
+import { batchExecute } from '../../utils/performance';
 
 export type PeerConnectionEventHandler = {
   onIceCandidate?: (candidate: RTCIceCandidate) => void;
@@ -7,15 +8,62 @@ export type PeerConnectionEventHandler = {
   onConnectionStateChange?: (state: RTCPeerConnectionState) => void;
 };
 
+interface PendingIceCandidate {
+  remoteUserId: string;
+  candidate: RTCIceCandidateInit;
+}
+
 /**
- * WebRTC P2P连接管理器
+ * WebRTC P2P连接管理器（优化版）
  */
 export class PeerConnectionManager {
   private peerConnections: Map<string, RTCPeerConnection> = new Map();
   private config: RTCConfiguration;
+  private pendingIceCandidates: PendingIceCandidate[] = [];
+  private iceBatchTimer: NodeJS.Timeout | null = null;
+  private readonly ICE_BATCH_DELAY = 100; // 100ms批量延迟
+  private readonly ICE_BATCH_SIZE = 5; // 批量大小
 
   constructor(config: RTCConfiguration = RTC_CONFIG) {
     this.config = config;
+  }
+
+  /**
+   * 批量处理ICE候选
+   */
+  private async processBatchIceCandidates(): Promise<void> {
+    if (this.pendingIceCandidates.length === 0) {
+      return;
+    }
+
+    const items = [...this.pendingIceCandidates];
+    this.pendingIceCandidates = [];
+    this.iceBatchTimer = null;
+
+    const groupedByUser = items.reduce((acc, item) => {
+      if (!acc[item.remoteUserId]) {
+        acc[item.remoteUserId] = [];
+      }
+      acc[item.remoteUserId].push(item.candidate);
+      return acc;
+    }, {} as Record<string, RTCIceCandidateInit[]>);
+
+    for (const [remoteUserId, candidates] of Object.entries(groupedByUser)) {
+      const pc = this.peerConnections.get(remoteUserId);
+      if (!pc) {
+        logger.warn('连接不存在，忽略批量ICE候选:', remoteUserId);
+        continue;
+      }
+
+      for (const candidate of candidates) {
+        try {
+          await pc.addIceCandidate(candidate);
+        } catch (error) {
+          logger.error('添加ICE候选失败:', error);
+        }
+      }
+      logger.debug(`批量添加${candidates.length}个ICE候选:`, remoteUserId);
+    }
   }
 
   /**
@@ -131,7 +179,7 @@ export class PeerConnectionManager {
   }
 
   /**
-   * 添加ICE候选
+   * 添加ICE候选（优化版：批量处理）
    */
   async addIceCandidate(
     remoteUserId: string,
@@ -143,11 +191,20 @@ export class PeerConnectionManager {
       return;
     }
 
-    try {
-      await pc.addIceCandidate(candidate);
-      logger.debug('添加ICE候选:', remoteUserId);
-    } catch (error) {
-      logger.error('添加ICE候选失败:', error);
+    // 加入批量队列
+    this.pendingIceCandidates.push({ remoteUserId, candidate });
+
+    // 达到批量大小，立即处理
+    if (this.pendingIceCandidates.length >= this.ICE_BATCH_SIZE) {
+      if (this.iceBatchTimer) {
+        clearTimeout(this.iceBatchTimer);
+      }
+      await this.processBatchIceCandidates();
+    } else if (!this.iceBatchTimer) {
+      // 否则等待延迟批量处理
+      this.iceBatchTimer = setTimeout(() => {
+        this.processBatchIceCandidates();
+      }, this.ICE_BATCH_DELAY);
     }
   }
 
