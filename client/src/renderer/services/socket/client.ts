@@ -1,19 +1,44 @@
 import { io, Socket } from 'socket.io-client';
-import { SocketEvents } from '@shared/events';
+import { SocketEvents, ServerEventParams, ServerEvents } from '@shared/events';
 import type {
   CreateRoomPayload,
   JoinRoomPayload,
   LeaveRoomPayload,
-  WebRTCSignalPayload,
   RoomCreatedPayload,
   RoomJoinedPayload,
   UserJoinedPayload,
   UserLeftPayload,
   UserStartSharingPayload,
   UserStopSharingPayload,
+  RTCSessionDescriptionData,
+  IceCandidate,
 } from '@shared/types';
 import { logger } from '../../utils/logger';
 import { DEFAULT_SERVER_URL } from '../../utils/constants';
+
+/**
+ * WebRTC Offer 数据类型
+ */
+export interface WebRTCOfferData {
+  fromUserId: string;
+  offer: RTCSessionDescriptionData;
+}
+
+/**
+ * WebRTC Answer 数据类型
+ */
+export interface WebRTCAnswerData {
+  fromUserId: string;
+  answer: RTCSessionDescriptionData;
+}
+
+/**
+ * WebRTC ICE 候选数据类型
+ */
+export interface WebRTCIceCandidateData {
+  fromUserId: string;
+  candidate: IceCandidate;
+}
 
 export type SocketEventHandlers = {
   onRoomCreated?: (data: RoomCreatedPayload) => void;
@@ -22,11 +47,12 @@ export type SocketEventHandlers = {
   onUserLeft?: (data: UserLeftPayload) => void;
   onUserStartSharing?: (data: UserStartSharingPayload) => void;
   onUserStopSharing?: (data: UserStopSharingPayload) => void;
-  onWebRTCOffer?: (data: WebRTCSignalPayload) => void;
-  onWebRTCAnswer?: (data: WebRTCSignalPayload) => void;
-  onWebRTCIceCandidate?: (data: WebRTCSignalPayload) => void;
+  onWebRTCOffer?: (data: WebRTCOfferData) => void;
+  onWebRTCAnswer?: (data: WebRTCAnswerData) => void;
+  onWebRTCIceCandidate?: (data: WebRTCIceCandidateData) => void;
   onError?: (error: { message: string; code?: string }) => void;
   onDisconnect?: () => void;
+  onReconnecting?: (attempt: number) => void;
 };
 
 /**
@@ -57,7 +83,22 @@ export class SocketService {
         this.socket = io(this.serverUrl, {
           reconnection: true,
           reconnectionDelay: 1000,
-          reconnectionAttempts: 5,
+          reconnectionDelayMax: 10000,
+          reconnectionAttempts: Infinity,
+        });
+
+        // 添加重连事件监听
+        this.socket.io.on('reconnect_attempt', (attempt) => {
+          logger.info(`正在尝试重连... 第${attempt}次`);
+          this.handlers.onReconnecting?.(attempt);
+        });
+
+        this.socket.io.on('reconnect', () => {
+          logger.info('重连成功');
+        });
+
+        this.socket.io.on('reconnect_failed', () => {
+          logger.error('重连失败');
         });
 
         this.socket.on('connect', () => {
@@ -118,19 +159,19 @@ export class SocketService {
       this.handlers.onUserStopSharing?.(data);
     });
 
-    // WebRTC信令事件
-    this.socket.on(SocketEvents.WEBRTC_OFFER, (data: WebRTCSignalPayload) => {
-      logger.info('收到Offer:', data.from);
+    // WebRTC信令事件 - 使用 ServerEventParams 中定义的正确类型
+    this.socket.on(SocketEvents.WEBRTC_OFFER, (data: WebRTCOfferData) => {
+      logger.info('收到Offer:', data.fromUserId);
       this.handlers.onWebRTCOffer?.(data);
     });
 
-    this.socket.on(SocketEvents.WEBRTC_ANSWER, (data: WebRTCSignalPayload) => {
-      logger.info('收到Answer:', data.from);
+    this.socket.on(SocketEvents.WEBRTC_ANSWER, (data: WebRTCAnswerData) => {
+      logger.info('收到Answer:', data.fromUserId);
       this.handlers.onWebRTCAnswer?.(data);
     });
 
-    this.socket.on(SocketEvents.WEBRTC_ICE_CANDIDATE, (data: WebRTCSignalPayload) => {
-      logger.debug('收到ICE候选:', data.from);
+    this.socket.on(SocketEvents.WEBRTC_ICE_CANDIDATE, (data: WebRTCIceCandidateData) => {
+      logger.debug('收到ICE候选:', data.fromUserId);
       this.handlers.onWebRTCIceCandidate?.(data);
     });
 
@@ -193,23 +234,41 @@ export class SocketService {
   }
 
   /**
-   * 发送WebRTC Offer
+   * 发送 Offer 的参数类型
    */
-  sendOffer(payload: WebRTCSignalPayload): Promise<void> {
+  sendOffer(payload: {
+    roomId: string;
+    from: string;
+    to: string;
+    targetUserId: string;
+    offer: RTCSessionDescriptionData;
+  }): Promise<void> {
     return this.emit(SocketEvents.SEND_OFFER, payload);
   }
 
   /**
-   * 发送WebRTC Answer
+   * 发送 Answer 的参数类型
    */
-  sendAnswer(payload: WebRTCSignalPayload): Promise<void> {
+  sendAnswer(payload: {
+    roomId: string;
+    from: string;
+    to: string;
+    targetUserId: string;
+    answer: RTCSessionDescriptionData;
+  }): Promise<void> {
     return this.emit(SocketEvents.SEND_ANSWER, payload);
   }
 
   /**
    * 发送ICE候选
    */
-  sendIceCandidate(payload: WebRTCSignalPayload): Promise<void> {
+  sendIceCandidate(payload: {
+    roomId: string;
+    from: string;
+    to: string;
+    targetUserId: string;
+    candidate: RTCIceCandidate;
+  }): Promise<void> {
     return this.emit(SocketEvents.SEND_ICE_CANDIDATE, payload);
   }
 

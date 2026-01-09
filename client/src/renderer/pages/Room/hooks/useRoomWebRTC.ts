@@ -1,0 +1,223 @@
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { PeerConnectionManager } from '../../../services/webrtc/peer-connection';
+import {
+  socketService,
+  WebRTCOfferData,
+  WebRTCAnswerData,
+  WebRTCIceCandidateData,
+} from '../../../services/socket/client';
+import { useStreamStore } from '../../../store/stream';
+import { useRoomStore } from '../../../store/room';
+import { useUserStore } from '../../../store/user';
+
+interface UseRoomWebRTCOptions {
+  roomId: string;
+}
+
+// 重新导出类型供 useRoomSocket 使用
+export type { WebRTCOfferData, WebRTCAnswerData, WebRTCIceCandidateData };
+
+/**
+ * WebRTC 连接管理 Hook
+ * 处理 P2P 连接的创建、Offer/Answer 交换、ICE 候选等逻辑
+ */
+export function useRoomWebRTC({ roomId }: UseRoomWebRTCOptions) {
+  const [peerManager] = useState(() => new PeerConnectionManager());
+  const { userId } = useUserStore();
+  const { addStream } = useStreamStore();
+
+  // 使用 ref 保存最新的 members，避免闭包陷阱
+  const membersRef = useRef(useRoomStore.getState().members);
+
+  useEffect(() => {
+    // 订阅 store 变化，保持 ref 最新
+    const unsubscribe = useRoomStore.subscribe((state) => {
+      membersRef.current = state.members;
+    });
+    return () => unsubscribe();
+  }, []);
+
+  /**
+   * 向指定用户发送 Offer
+   */
+  const sendOfferToUser = useCallback(
+    async (targetUserId: string, stream: MediaStream) => {
+      const pc = peerManager.createConnection(targetUserId, {
+        onIceCandidate: (candidate) => {
+          socketService.sendIceCandidate({
+            roomId,
+            from: userId,
+            to: targetUserId,
+            targetUserId,
+            candidate,
+          });
+        },
+        onTrack: (remoteStream) => {
+          const member = membersRef.current.find((m) => m.id === targetUserId);
+          addStream({
+            userId: targetUserId,
+            stream: remoteStream,
+            nickname: member?.nickname || 'Unknown',
+            isLocal: false,
+          });
+        },
+      });
+
+      peerManager.addStream(targetUserId, stream);
+      const offer = await peerManager.createOffer(targetUserId);
+
+      await socketService.sendOffer({
+        roomId,
+        from: userId,
+        to: targetUserId,
+        targetUserId,
+        offer: {
+          type: offer.type as 'offer' | 'answer',
+          sdp: offer.sdp!,
+        },
+      });
+    },
+    [roomId, userId, peerManager, addStream]
+  );
+
+  /**
+   * 向所有房间成员发送 Offer
+   */
+  const sendOfferToAllMembers = useCallback(
+    async (stream: MediaStream) => {
+      const members = membersRef.current;
+      const otherMembers = members.filter((m) => m.id !== userId);
+
+      for (const member of otherMembers) {
+        try {
+          await sendOfferToUser(member.id, stream);
+          console.log('[useRoomWebRTC] 已向成员发送offer', member.nickname);
+        } catch (error) {
+          console.error('[useRoomWebRTC] 向成员发送offer失败', member.nickname, error);
+        }
+      }
+    },
+    [userId, sendOfferToUser]
+  );
+
+  /**
+   * 处理收到的 WebRTC Offer
+   */
+  const handleWebRTCOffer = useCallback(
+    async (data: WebRTCOfferData) => {
+      console.log('[useRoomWebRTC] 处理Offer，fromUserId:', data.fromUserId);
+
+      if (!data.fromUserId) {
+        console.error('[useRoomWebRTC] Offer缺少fromUserId字段', data);
+        return;
+      }
+
+      peerManager.createConnection(data.fromUserId, {
+        onIceCandidate: (candidate) => {
+          socketService.sendIceCandidate({
+            roomId,
+            from: userId,
+            to: data.fromUserId,
+            targetUserId: data.fromUserId,
+            candidate,
+          });
+        },
+        onTrack: (remoteStream) => {
+          console.log('[useRoomWebRTC] 收到远程流 from:', data.fromUserId);
+          const member = membersRef.current.find((m) => m.id === data.fromUserId);
+          addStream({
+            userId: data.fromUserId,
+            stream: remoteStream,
+            nickname: member?.nickname || 'Unknown',
+            isLocal: false,
+          });
+        },
+      });
+
+      // 转换类型：RTCSessionDescriptionData -> RTCSessionDescriptionInit
+      const offerInit: RTCSessionDescriptionInit = {
+        type: data.offer.type,
+        sdp: data.offer.sdp,
+      };
+      await peerManager.setRemoteDescription(data.fromUserId, offerInit);
+
+      // 如果自己正在共享，添加本地流
+      const localStream = useStreamStore.getState().localStream;
+      if (localStream) {
+        peerManager.addStream(data.fromUserId, localStream);
+      }
+
+      const answer = await peerManager.createAnswer(data.fromUserId);
+      await socketService.sendAnswer({
+        roomId,
+        from: userId,
+        to: data.fromUserId,
+        targetUserId: data.fromUserId,
+        answer: {
+          type: answer.type as 'offer' | 'answer',
+          sdp: answer.sdp!,
+        },
+      });
+    },
+    [roomId, userId, peerManager, addStream]
+  );
+
+  /**
+   * 处理收到的 WebRTC Answer
+   */
+  const handleWebRTCAnswer = useCallback(
+    async (data: WebRTCAnswerData) => {
+      // 转换类型：RTCSessionDescriptionData -> RTCSessionDescriptionInit
+      const answerInit: RTCSessionDescriptionInit = {
+        type: data.answer.type,
+        sdp: data.answer.sdp,
+      };
+      await peerManager.setRemoteDescription(data.fromUserId, answerInit);
+    },
+    [peerManager]
+  );
+
+  /**
+   * 处理收到的 ICE 候选
+   */
+  const handleIceCandidate = useCallback(
+    async (data: WebRTCIceCandidateData) => {
+      // 转换类型：IceCandidate -> RTCIceCandidateInit
+      const candidateInit: RTCIceCandidateInit = {
+        candidate: data.candidate.candidate,
+        sdpMLineIndex: data.candidate.sdpMLineIndex,
+        sdpMid: data.candidate.sdpMid,
+      };
+      await peerManager.addIceCandidate(data.fromUserId, candidateInit);
+    },
+    [peerManager]
+  );
+
+  /**
+   * 关闭指定用户的连接
+   */
+  const closeConnection = useCallback(
+    (targetUserId: string) => {
+      peerManager.closeConnection(targetUserId);
+    },
+    [peerManager]
+  );
+
+  /**
+   * 关闭所有连接并清理资源
+   */
+  const cleanup = useCallback(() => {
+    peerManager.destroy();
+  }, [peerManager]);
+
+  return {
+    peerManager,
+    sendOfferToUser,
+    sendOfferToAllMembers,
+    handleWebRTCOffer,
+    handleWebRTCAnswer,
+    handleIceCandidate,
+    closeConnection,
+    cleanup,
+  };
+}

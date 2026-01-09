@@ -239,6 +239,26 @@ export class PeerConnectionManager {
   }
 
   /**
+   * 销毁管理器，清理所有资源
+   * 包括关闭所有连接和清理定时器
+   */
+  destroy(): void {
+    // 清理 ICE 批量处理定时器
+    if (this.iceBatchTimer) {
+      clearTimeout(this.iceBatchTimer);
+      this.iceBatchTimer = null;
+    }
+
+    // 清理待处理的 ICE 候选
+    this.pendingIceCandidates = [];
+
+    // 关闭所有连接
+    this.closeAllConnections();
+
+    logger.info('PeerConnectionManager 已销毁');
+  }
+
+  /**
    * 获取连接统计信息
    */
   async getStats(remoteUserId: string): Promise<RTCStatsReport | null> {

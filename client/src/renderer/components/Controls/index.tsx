@@ -34,8 +34,9 @@ const Controls: React.FC<ControlsProps> = ({ roomId, onLeave, onStartSharing }) 
       setSourceModalVisible(true);
       const availableSources = await screenCaptureService.getSources();
       setSources(availableSources);
-    } catch (error: any) {
-      message.error('获取屏幕源失败: ' + error.message);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      message.error('获取屏幕源失败: ' + errorMessage);
     } finally {
       setLoadingSources(false);
     }
@@ -101,9 +102,10 @@ const Controls: React.FC<ControlsProps> = ({ roomId, onLeave, onStartSharing }) 
       // 向房间内所有其他成员发送 WebRTC offer
       console.log('[Controls] 向所有成员发送offer');
       await onStartSharing(stream);
-    } catch (error: any) {
+    } catch (error) {
       console.error('[Controls] 开始共享失败', error);
-      message.error('开始共享失败: ' + error.message);
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      message.error('开始共享失败: ' + errorMessage);
       setSourceModalVisible(false);
     }
   };
@@ -122,8 +124,9 @@ const Controls: React.FC<ControlsProps> = ({ roomId, onLeave, onStartSharing }) 
       await socketService.stopSharing();
 
       message.info('已停止共享');
-    } catch (error: any) {
-      message.error('停止共享失败: ' + error.message);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      message.error('停止共享失败: ' + errorMessage);
     }
   };
 

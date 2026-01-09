@@ -29,6 +29,7 @@ export const ROOM_ID_LENGTH = 6;
 
 // 本地存储键
 export const STORAGE_KEYS = {
+  USER_ID: 'user_id',
   USER_NICKNAME: 'user_nickname',
   USER_AVATAR: 'user_avatar',
   RECENT_ROOMS: 'recent_rooms',

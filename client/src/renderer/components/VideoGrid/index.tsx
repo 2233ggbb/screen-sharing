@@ -1,9 +1,13 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, memo, useCallback } from 'react';
 import { Empty } from 'antd';
 import { VideoCameraOutlined } from '@ant-design/icons';
 import { useStreamStore } from '../../store/stream';
 import './index.less';
 
+/**
+ * 视频网格组件
+ * 显示所有共享的屏幕流
+ */
 const VideoGrid: React.FC = () => {
   const { streams, focusedStreamUserId, setFocusedStream } = useStreamStore();
 
@@ -92,17 +96,34 @@ interface VideoPlayerProps {
   onDoubleClick?: () => void;
 }
 
-const VideoPlayer: React.FC<VideoPlayerProps> = ({ stream, nickname, onDoubleClick }) => {
+/**
+ * 视频播放器组件
+ * 使用 React.memo 避免不必要的重渲染
+ */
+const VideoPlayer = memo<VideoPlayerProps>(({ stream, nickname, onDoubleClick }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
+    const videoElement = videoRef.current;
+    
+    if (videoElement && stream) {
+      videoElement.srcObject = stream;
     }
+
+    // 清理函数 - 防止内存泄漏
+    return () => {
+      if (videoElement) {
+        videoElement.srcObject = null;
+      }
+    };
   }, [stream]);
 
+  const handleDoubleClick = useCallback(() => {
+    onDoubleClick?.();
+  }, [onDoubleClick]);
+
   return (
-    <div className="video-player" onDoubleClick={onDoubleClick}>
+    <div className="video-player" onDoubleClick={handleDoubleClick}>
       <video
         ref={videoRef}
         autoPlay
@@ -113,6 +134,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ stream, nickname, onDoubleCli
       <div className="video-nickname">{nickname}</div>
     </div>
   );
-};
+});
+
+// 添加 displayName 用于调试
+VideoPlayer.displayName = 'VideoPlayer';
 
 export default VideoGrid;
