@@ -1,0 +1,185 @@
+# GitHub Actions: 客户端发布工作流
+# 当推送 v* 格式的 Tag 时，自动构建 macOS/Windows/Linux 版本并发布到 GitHub Releases
+
+name: Release Client
+
+on:
+  push:
+    tags:
+      - 'v*'  # 匹配 v1.0.0, v1.2.3-beta 等格式
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # 创建 Release
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create_release.outputs.id }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Screen Sharing v${{ steps.get_version.outputs.VERSION }}
+          body: |
+            ## 🎉 Screen Sharing v${{ steps.get_version.outputs.VERSION }}
+            
+            ### 下载
+            - **macOS**: 下载 `.dmg` 文件
+            - **Windows**: 下载 `.exe` 安装程序
+            - **Linux**: 下载 `.AppImage` 或 `.deb` 文件
+            
+            ### 更新内容
+            请查看 [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # macOS 构建
+  build-macos:
+    needs: create-release
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: |
+            shared/package-lock.json
+            client/package-lock.json
+
+      - name: Install dependencies (shared)
+        working-directory: shared
+        run: npm ci
+
+      - name: Build shared
+        working-directory: shared
+        run: npm run build
+
+      - name: Install dependencies (client)
+        working-directory: client
+        run: npm ci
+
+      - name: Build Electron app
+        working-directory: client
+        run: npm run build:prod
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false  # 跳过代码签名（如需签名请配置证书）
+
+      - name: Upload macOS artifacts
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            client/release/*.dmg
+            client/release/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Windows 构建
+  build-windows:
+    needs: create-release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: |
+            shared/package-lock.json
+            client/package-lock.json
+
+      - name: Install dependencies (shared)
+        working-directory: shared
+        run: npm ci
+
+      - name: Build shared
+        working-directory: shared
+        run: npm run build
+
+      - name: Install dependencies (client)
+        working-directory: client
+        run: npm ci
+
+      - name: Build Electron app
+        working-directory: client
+        run: npm run build:prod
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Windows artifacts
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            client/release/*.exe
+            client/release/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Linux 构建
+  build-linux:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: |
+            shared/package-lock.json
+            client/package-lock.json
+
+      - name: Install dependencies (shared)
+        working-directory: shared
+        run: npm ci
+
+      - name: Build shared
+        working-directory: shared
+        run: npm run build
+
+      - name: Install dependencies (client)
+        working-directory: client
+        run: npm ci
+
+      - name: Build Electron app
+        working-directory: client
+        run: npm run build:prod
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Linux artifacts
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            client/release/*.AppImage
+            client/release/*.deb
+            client/release/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

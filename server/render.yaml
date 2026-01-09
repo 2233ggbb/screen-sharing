@@ -1,0 +1,24 @@
+# render.yaml - Render 部署配置
+# 使用 Infrastructure as Code 部署
+# 文档: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: screen-sharing-server
+    env: node
+    region: singapore  # 新加坡区域，适合亚太用户
+    plan: free
+    branch: main
+    rootDir: ./
+    buildCommand: |
+      cd shared && npm install && npm run build && cd ../server && npm install && npm run build
+    startCommand: cd server && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: CORS_ORIGIN
+        value: "*"
+    autoDeploy: true

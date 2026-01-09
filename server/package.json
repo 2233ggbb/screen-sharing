@@ -12,7 +12,11 @@
     "lint:fix": "eslint src --ext .ts --fix",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "deploy:railway": "railway up",
+    "deploy:fly": "flyctl deploy",
+    "docker:build": "docker build -t screen-sharing-server:latest -f Dockerfile ..",
+    "docker:run": "docker run -p 3000:3000 screen-sharing-server:latest"
   },
   "keywords": [
     "screen-sharing",

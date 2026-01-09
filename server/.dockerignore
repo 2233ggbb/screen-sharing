@@ -1,0 +1,45 @@
+# 依赖目录
+node_modules
+**/node_modules
+
+# 构建输出
+dist
+**/dist
+
+# 测试相关
+coverage
+**/*.test.ts
+**/*.spec.ts
+__tests__
+
+# 日志
+logs
+*.log
+
+# 开发环境配置
+.env
+.env.local
+.env.development
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# 文档
+*.md
+!README.md
+
+# 配置文件（部署时不需要）
+railway.json
+fly.toml
+render.yaml
