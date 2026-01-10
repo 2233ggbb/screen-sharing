@@ -5,7 +5,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # 复制 shared 包
-COPY shared/package*.json ./shared/
+COPY shared/package.json shared/package-lock.json ./shared/
 COPY shared/tsconfig.json ./shared/
 COPY shared/src ./shared/src
 
@@ -15,7 +15,7 @@ RUN npm ci && npm run build
 
 # 复制 server 包
 WORKDIR /app
-COPY server/package*.json ./server/
+COPY server/package.json server/package-lock.json ./server/
 COPY server/tsconfig.json ./server/
 COPY server/src ./server/src
 
