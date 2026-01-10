@@ -1,0 +1,32 @@
+# 依赖
+node_modules/
+# 注意: package-lock.json 应该被提交以确保依赖版本一致性
+
+# 构建输出
+dist/
+build/
+
+# 日志
+logs/
+*.log
+npm-debug.log*
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 测试覆盖率
+coverage/
+.nyc_output/
+
+# 临时文件
+tmp/
+temp/
+*.tmp
