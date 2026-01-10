@@ -1,0 +1,59 @@
+# 依赖目录
+node_modules
+**/node_modules
+
+# 构建输出
+dist
+**/dist
+
+# 测试相关
+coverage
+**/*.test.ts
+**/*.spec.ts
+**/__tests__
+
+# 日志
+logs
+*.log
+**/logs
+
+# 开发环境配置
+.env
+.env.local
+.env.development
+**/.env
+**/.env.local
+**/.env.development
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+.github
+
+# 文档
+*.md
+!README.md
+
+# 客户端目录（服务器构建不需要）
+client
+
+# 其他配置文件
+plans
+docs
+scripts
+CHANGELOG.md
+AGENTS.md
+
+# 不要忽略 package-lock.json（构建需要）
+!package-lock.json
+!**/package-lock.json
