@@ -14,7 +14,7 @@ import type {
   IceCandidate,
 } from '@shared/types';
 import { logger } from '../../utils/logger';
-import { DEFAULT_SERVER_URL } from '../../utils/constants';
+import { DEFAULT_SERVER_URL, STORAGE_KEYS } from '../../utils/constants';
 
 /**
  * WebRTC Offer 数据类型
@@ -73,13 +73,27 @@ export class SocketService {
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        // 如果已经连接，直接返回
+        // 从 localStorage 读取服务器地址（如果有的话）
+        const savedServerUrl = localStorage.getItem(STORAGE_KEYS.SERVER_URL);
+        if (savedServerUrl && savedServerUrl !== this.serverUrl) {
+          logger.info('使用保存的服务器地址:', savedServerUrl);
+          this.serverUrl = savedServerUrl;
+        }
+
+        // 如果已经连接，检查是否需要重新连接（服务器地址变化）
         if (this.socket?.connected) {
           logger.info('Socket已连接，跳过重复连接');
           resolve();
           return;
         }
 
+        // 断开旧连接（如果存在）
+        if (this.socket) {
+          this.socket.disconnect();
+          this.socket = null;
+        }
+
+        logger.info('正在连接到服务器:', this.serverUrl);
         this.socket = io(this.serverUrl, {
           reconnection: true,
           reconnectionDelay: 1000,
@@ -308,6 +322,32 @@ export class SocketService {
    */
   isConnected(): boolean {
     return this.socket?.connected ?? false;
+  }
+
+  /**
+   * 更新服务器地址
+   * 如果当前已连接，会断开并使用新地址重新连接
+   */
+  updateServerUrl(newUrl: string): void {
+    if (this.serverUrl === newUrl) {
+      return;
+    }
+
+    logger.info('更新服务器地址:', newUrl);
+    this.serverUrl = newUrl;
+
+    // 如果当前已连接，断开连接
+    if (this.socket?.connected) {
+      logger.info('断开当前连接以使用新地址');
+      this.disconnect();
+    }
+  }
+
+  /**
+   * 获取当前服务器地址
+   */
+  getServerUrl(): string {
+    return this.serverUrl;
   }
 }
 

@@ -14,6 +14,7 @@ import {
 } from 'antd';
 import { ArrowLeftOutlined, SaveOutlined } from '@ant-design/icons';
 import { STORAGE_KEYS, DEFAULT_SERVER_URL } from '../../utils/constants';
+import { socketService } from '../../services/socket/client';
 import './index.less';
 
 const { Title, Text } = Typography;
@@ -58,7 +59,10 @@ const Settings: React.FC = () => {
       localStorage.setItem(STORAGE_KEYS.SERVER_URL, values.serverUrl);
       localStorage.setItem(STORAGE_KEYS.THEME, values.theme);
 
-      message.success('设置已保存');
+      // 更新 socket 服务的服务器地址
+      socketService.updateServerUrl(values.serverUrl);
+
+      message.success('设置已保存，服务器地址已更新');
       setTimeout(() => {
         navigate('/');
       }, 1000);
