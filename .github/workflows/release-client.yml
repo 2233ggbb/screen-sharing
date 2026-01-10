@@ -142,48 +142,48 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Linux 构建
-  build-linux:
-    needs: create-release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+  # Linux 构建（暂时禁用）
+  # build-linux:
+  #   needs: create-release
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: |
-            shared/package-lock.json
-            client/package-lock.json
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: ${{ env.NODE_VERSION }}
+  #         cache: 'npm'
+  #         cache-dependency-path: |
+  #           shared/package-lock.json
+  #           client/package-lock.json
 
-      - name: Install dependencies (shared)
-        working-directory: shared
-        run: npm ci
+  #     - name: Install dependencies (shared)
+  #       working-directory: shared
+  #       run: npm ci
 
-      - name: Build shared
-        working-directory: shared
-        run: npm run build
+  #     - name: Build shared
+  #       working-directory: shared
+  #       run: npm run build
 
-      - name: Install dependencies (client)
-        working-directory: client
-        run: npm ci
+  #     - name: Install dependencies (client)
+  #       working-directory: client
+  #       run: npm ci
 
-      - name: Build Electron app
-        working-directory: client
-        run: npm run build:prod
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #     - name: Build Electron app
+  #       working-directory: client
+  #       run: npm run build:prod
+  #       env:
+  #         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Linux artifacts
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: |
-            client/release/*.AppImage
-            client/release/*.deb
-            client/release/*.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #     - name: Upload Linux artifacts
+  #       uses: softprops/action-gh-release@v1
+  #       with:
+  #         tag_name: ${{ github.ref_name }}
+  #         files: |
+  #           client/release/*.AppImage
+  #           client/release/*.deb
+  #           client/release/*.zip
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
