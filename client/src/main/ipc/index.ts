@@ -5,7 +5,7 @@ import { BrowserWindow, ipcMain, desktopCapturer } from 'electron';
  */
 export function setupIpcHandlers(mainWindow: BrowserWindow) {
   // 获取屏幕和窗口源
-  ipcMain.handle('get-desktop-sources', async (event, options) => {
+  ipcMain.handle('get-desktop-sources', async (_event, options) => {
     try {
       const sources = await desktopCapturer.getSources(options);
       return sources;

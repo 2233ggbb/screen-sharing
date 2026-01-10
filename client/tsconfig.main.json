@@ -3,6 +3,9 @@
   "compilerOptions": {
     "outDir": "dist/main",
     "module": "commonjs",
+    "moduleResolution": "node",
+    "allowImportingTsExtensions": false,
+    "esModuleInterop": true,
     "noEmit": false,
     "jsx": "preserve"
   },

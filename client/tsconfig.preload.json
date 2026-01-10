@@ -3,6 +3,8 @@
   "compilerOptions": {
     "outDir": "dist/preload",
     "module": "commonjs",
+    "moduleResolution": "node",
+    "allowImportingTsExtensions": false,
     "noEmit": false,
     "jsx": "preserve"
   },
