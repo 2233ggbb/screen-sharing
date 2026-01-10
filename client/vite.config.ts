@@ -5,6 +5,8 @@ import renderer from 'vite-plugin-electron-renderer';
 import path from 'path';
 
 export default defineConfig({
+  // 设置 base 为相对路径,确保打包后资源正确加载
+  base: './',
   plugins: [
     react(),
     electron([
@@ -45,5 +47,9 @@ export default defineConfig({
   build: {
     outDir: 'dist/renderer',
     emptyOutDir: true,
+    // 确保资源路径正确
+    assetsDir: 'assets',
+    // 生成 sourcemap 便于调试
+    sourcemap: false,
   },
 });

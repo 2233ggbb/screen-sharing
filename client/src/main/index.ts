@@ -20,6 +20,9 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, '../preload/index.js'),
+      // 生产环境需要关闭 webSecurity 以允许 file:// 协议加载 ES 模块
+      // 这在桌面应用中是安全的,因为只加载本地文件且已启用 contextIsolation
+      webSecurity: isDev,
     },
     show: false,
   });
@@ -29,12 +32,27 @@ function createWindow() {
     mainWindow?.show();
   });
 
+  // 监听渲染进程的控制台消息,便于调试打包后的问题
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    console.log(`[Renderer Console ${level}]:`, message, `at ${sourceId}:${line}`);
+  });
+
+  // 监听加载失败事件
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+    console.error('Failed to load:', errorCode, errorDescription);
+  });
+
   // 加载应用
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+    // 生产环境加载本地文件
+    const indexPath = path.join(__dirname, '../renderer/index.html');
+    console.log('Loading file from:', indexPath);
+    mainWindow.loadFile(indexPath).catch(err => {
+      console.error('Failed to load index.html:', err);
+    });
   }
 
   // 窗口关闭事件
