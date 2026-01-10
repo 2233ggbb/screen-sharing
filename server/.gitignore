@@ -1,6 +1,6 @@
 # 依赖
 node_modules/
-package-lock.json
+# 注意: package-lock.json 应该被提交以确保依赖版本一致性
 
 # 构建输出
 dist/
