@@ -49,6 +49,9 @@ COPY --from=builder /app/server/node_modules ./server/node_modules
 # 切换到 server 目录
 WORKDIR /app/server
 
+# 创建 logs 目录并设置权限（虽然生产环境不写文件，但确保目录存在）
+RUN mkdir -p logs && chown -R server:nodejs logs
+
 # 切换用户
 USER server
 

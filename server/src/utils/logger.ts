@@ -29,18 +29,20 @@ function createLogger(): winston.Logger {
     })
   );
 
-  // 创建Logger实例
-  const logger = winston.createLogger({
-    level: config.log.level,
-    format: logFormat,
-    transports: [
-      // 控制台输出
-      new winston.transports.Console({
-        format: winston.format.combine(
-          winston.format.colorize(),
-          logFormat
-        ),
-      }),
+  // 基础 transports（控制台输出）
+  const transports: winston.transport[] = [
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        logFormat
+      ),
+    }),
+  ];
+
+  // 生产环境：只输出到控制台（适合容器化部署，日志由平台收集）
+  // 开发/测试环境：同时输出到文件
+  if (config.nodeEnv !== 'production') {
+    transports.push(
       // 普通日志文件
       new winston.transports.File({
         filename: path.join(logDir, 'app.log'),
@@ -54,8 +56,15 @@ function createLogger(): winston.Logger {
         level: 'error',
         maxsize: 10 * 1024 * 1024, // 10MB
         maxFiles: 5,
-      }),
-    ],
+      })
+    );
+  }
+
+  // 创建Logger实例
+  const logger = winston.createLogger({
+    level: config.log.level,
+    format: logFormat,
+    transports,
   });
 
   return logger;
