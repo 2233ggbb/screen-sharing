@@ -1,0 +1,23 @@
+# render-docker.yaml - Render Docker 部署配置
+# 使用 Infrastructure as Code 部署 Docker 镜像
+# 文档: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: screen-sharing-server
+    runtime: docker
+    region: singapore
+    plan: free
+    branch: main
+    # Docker Context 必须是仓库根目录，因为需要访问 shared 和 server 两个目录
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: ./
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: CORS_ORIGIN
+        value: "*"
+    autoDeploy: true
