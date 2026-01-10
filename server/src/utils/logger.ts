@@ -41,7 +41,7 @@ function createLogger(): winston.Logger {
 
   // 生产环境：只输出到控制台（适合容器化部署，日志由平台收集）
   // 开发/测试环境：同时输出到文件
-  if (config.nodeEnv !== 'production') {
+  if (config.env !== 'production') {
     transports.push(
       // 普通日志文件
       new winston.transports.File({
