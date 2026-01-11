@@ -21,7 +21,8 @@ const Room: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const { reset: resetRoom } = useRoomStore();
-  const { reset: resetStreams } = useStreamStore();
+  const reset = useStreamStore((state) => state.reset);
+  const isFullscreen = useStreamStore((state) => state.isFullscreen);
   const [loading, setLoading] = useState(true);
 
   // 使用 WebRTC Hook
@@ -100,9 +101,9 @@ const Room: React.FC = () => {
     leaveRoom();
     cleanupWebRTC();
     resetRoom();
-    resetStreams();
+    reset();
     navigate('/');
-  }, [leaveRoom, cleanupWebRTC, resetRoom, resetStreams, navigate]);
+  }, [leaveRoom, cleanupWebRTC, resetRoom, reset, navigate]);
 
   if (loading) {
     return (
@@ -116,15 +117,21 @@ const Room: React.FC = () => {
     <Layout className="room-page">
       <Content className="room-content">
         <VideoGrid />
-        <Controls
-          roomId={roomId!}
-          onLeave={handleLeaveRoom}
-          onStartSharing={sendOfferToAllMembers}
-        />
+        {/* 全屏时隐藏控制栏 */}
+        {!isFullscreen && (
+          <Controls
+            roomId={roomId!}
+            onLeave={handleLeaveRoom}
+            onStartSharing={sendOfferToAllMembers}
+          />
+        )}
       </Content>
-      <Sider width={280} theme="light" className="room-sider">
-        <UserList />
-      </Sider>
+      {/* 全屏时隐藏侧边栏 */}
+      {!isFullscreen && (
+        <Sider width={280} theme="light" className="room-sider">
+          <UserList />
+        </Sider>
+      )}
     </Layout>
   );
 };

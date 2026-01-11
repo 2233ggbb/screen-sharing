@@ -11,19 +11,27 @@ interface StreamState {
   streams: StreamInfo[];
   localStream: MediaStream | null;
   focusedStreamUserId: string | null;
+  /** 是否共享系统音频 */
+  shareSystemAudio: boolean;
+  /** 是否处于全屏模式 */
+  isFullscreen: boolean;
   
   addStream: (stream: StreamInfo) => void;
   removeStream: (userId: string) => void;
   setLocalStream: (stream: MediaStream | null) => void;
   setFocusedStream: (userId: string | null) => void;
+  setShareSystemAudio: (enabled: boolean) => void;
+  setIsFullscreen: (isFullscreen: boolean) => void;
   getStream: (userId: string) => StreamInfo | undefined;
   reset: () => void;
 }
 
 const initialState = {
-  streams: [],
-  localStream: null,
-  focusedStreamUserId: null,
+  streams: [] as StreamInfo[],
+  localStream: null as MediaStream | null,
+  focusedStreamUserId: null as string | null,
+  shareSystemAudio: true, // 默认开启系统音频共享
+  isFullscreen: false,
 };
 
 export const useStreamStore = create<StreamState>((set, get) => ({
@@ -63,6 +71,10 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   },
   
   setFocusedStream: (userId) => set({ focusedStreamUserId: userId }),
+
+  setShareSystemAudio: (enabled) => set({ shareSystemAudio: enabled }),
+
+  setIsFullscreen: (isFullscreen) => set({ isFullscreen }),
   
   getStream: (userId) => {
     return get().streams.find((s) => s.userId === userId);

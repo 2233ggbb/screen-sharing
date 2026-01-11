@@ -9,6 +9,11 @@ export interface DesktopSource {
   appIcon?: string;
 }
 
+export interface CaptureOptions {
+  /** 是否捕获系统音频 */
+  captureAudio?: boolean;
+}
+
 /**
  * 屏幕捕获服务
  */
@@ -40,14 +45,33 @@ export class ScreenCaptureService {
 
   /**
    * 从指定源创建媒体流
+   * @param sourceId - 屏幕源ID
+   * @param options - 捕获选项，包括是否捕获系统音频
    */
-  async getStreamFromSource(sourceId: string): Promise<MediaStream> {
+  async getStreamFromSource(
+    sourceId: string,
+    options: CaptureOptions = {}
+  ): Promise<MediaStream> {
+    const { captureAudio = false } = options;
+
     try {
       // 停止之前的流
       this.stopCurrentStream();
 
+      // 构建音频约束
+      // Windows 支持系统音频捕获，macOS 需要额外权限
+      const audioConstraints = captureAudio
+        ? {
+            // @ts-ignore - Electron特定的约束
+            mandatory: {
+              chromeMediaSource: 'desktop',
+              chromeMediaSourceId: sourceId,
+            },
+          }
+        : false;
+
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
+        audio: audioConstraints,
         video: {
           // @ts-ignore - Electron特定的约束
           mandatory: {
@@ -64,7 +88,12 @@ export class ScreenCaptureService {
       } as any);
 
       this.currentStream = stream;
-      logger.info('成功获取屏幕流:', { sourceId, tracks: stream.getTracks().length });
+      logger.info('成功获取屏幕流:', {
+        sourceId,
+        captureAudio,
+        videoTracks: stream.getVideoTracks().length,
+        audioTracks: stream.getAudioTracks().length,
+      });
       return stream;
     } catch (error) {
       logger.error('获取屏幕流失败:', error);

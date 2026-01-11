@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Button, Space, Modal, message, List, Image } from 'antd';
+import { Button, Space, Modal, message, List, Image, Switch, Tooltip } from 'antd';
 import {
   DesktopOutlined,
   StopOutlined,
   LogoutOutlined,
   CopyOutlined,
+  SoundOutlined,
 } from '@ant-design/icons';
 import { useStreamStore } from '../../store/stream';
 import { useUserStore } from '../../store/user';
@@ -21,7 +22,7 @@ interface ControlsProps {
 
 const Controls: React.FC<ControlsProps> = ({ roomId, onLeave, onStartSharing }) => {
   const { userId } = useUserStore();
-  const { localStream, setLocalStream, addStream, removeStream } = useStreamStore();
+  const { localStream, setLocalStream, addStream, removeStream, shareSystemAudio, setShareSystemAudio } = useStreamStore();
   const [isSharing, setIsSharing] = useState(false);
   const [sourceModalVisible, setSourceModalVisible] = useState(false);
   const [sources, setSources] = useState<DesktopSource[]>([]);
@@ -45,7 +46,9 @@ const Controls: React.FC<ControlsProps> = ({ roomId, onLeave, onStartSharing }) 
   // 选择源并开始共享
   const handleSelectSource = async (sourceId: string) => {
     try {
-      const stream = await screenCaptureService.getStreamFromSource(sourceId);
+      const stream = await screenCaptureService.getStreamFromSource(sourceId, {
+        captureAudio: shareSystemAudio,
+      });
       
       // 获取选中的源信息
       const selectedSource = sources.find(s => s.id === sourceId);
@@ -198,6 +201,21 @@ const Controls: React.FC<ControlsProps> = ({ roomId, onLeave, onStartSharing }) 
         footer={null}
         width={800}
       >
+        {/* 系统音频开关 */}
+        <div className="audio-switch-container">
+          <Tooltip title="共享系统音频（仅 Windows 完全支持）">
+            <Space>
+              <SoundOutlined />
+              <span>共享系统音频</span>
+              <Switch
+                checked={shareSystemAudio}
+                onChange={setShareSystemAudio}
+                size="small"
+              />
+            </Space>
+          </Tooltip>
+        </div>
+
         <List
           loading={loadingSources}
           grid={{ gutter: 16, column: 2 }}

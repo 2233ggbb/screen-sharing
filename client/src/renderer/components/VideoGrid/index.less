@@ -10,6 +10,7 @@
   display: grid;
   gap: 8px;
   padding: 8px;
+  padding-bottom: 72px; // 留出底部 Controls 的空间（约 56px 高度 + 16px 间距）
   flex: 1;
   width: 100%;
   align-content: center;
@@ -18,6 +19,13 @@
   &.grid-1x1 {
     grid-template-columns: 1fr;
     grid-template-rows: 1fr;
+
+    .grid-item {
+      // 单个视频时不需要 scale 效果
+      &:hover {
+        transform: none;
+      }
+    }
   }
   
   // 2x2 网格布局（2-4个屏幕）
@@ -39,15 +47,21 @@
   }
   
   .grid-item {
+    position: relative;
     background: #000;
     border-radius: 4px;
-    overflow: hidden;
+    overflow: visible; // 确保控制按钮不被裁剪
     cursor: pointer;
     transition: transform 0.2s;
     min-height: 0;
-    
+
     &:hover {
       transform: scale(1.02);
+
+      // 悬停时显示控制按钮
+      .video-controls {
+        opacity: 1;
+      }
     }
   }
 }
@@ -57,6 +71,7 @@
   height: 100%;
   gap: 8px;
   padding: 8px;
+  padding-bottom: 72px; // 留出底部 Controls 的空间
   
   .focus-main {
     flex: 1;
@@ -101,12 +116,97 @@
   
   .video-nickname {
     position: absolute;
-    bottom: 8px;
-    left: 8px;
+    bottom: 16px;
+    left: 16px;
     background: rgba(0, 0, 0, 0.6);
     color: #fff;
     padding: 4px 12px;
     border-radius: 4px;
     font-size: 14px;
+    z-index: 10;
+  }
+
+  // 视频控制按钮容器
+  .video-controls {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    display: flex;
+    gap: 8px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 10;
+
+    .fullscreen-btn {
+      background: rgba(0, 0, 0, 0.6);
+      border: none;
+      color: #fff;
+      width: 32px;
+      height: 32px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.2s;
+
+      &:hover {
+        background: rgba(0, 0, 0, 0.8);
+        color: #1890ff;
+      }
+
+      .anticon {
+        font-size: 18px;
+      }
+    }
+  }
+
+  // 鼠标悬停时显示控制按钮
+  &:hover .video-controls {
+    opacity: 1;
+  }
+
+  // 全屏状态样式 - 控件位置调整
+  &.is-fullscreen {
+    .video-controls {
+      bottom: 24px;
+      right: 24px;
+      opacity: 1;
+      transition: opacity 0.3s;
+
+      .fullscreen-btn {
+        width: 44px;
+        height: 44px;
+
+        .anticon {
+          font-size: 24px;
+        }
+      }
+    }
+
+    .video-nickname {
+      bottom: 24px;
+      left: 24px;
+      font-size: 18px;
+      padding: 8px 20px;
+      opacity: 1;
+      transition: opacity 0.3s;
+    }
+
+    // 隐藏鼠标指针的状态
+    &.hide-cursor {
+      cursor: none !important;
+      
+      * {
+        cursor: none !important;
+      }
+    }
+  }
+
+  // 隐藏状态 - 通过 JS 控制
+  .video-controls.hidden,
+  .video-nickname.hidden {
+    opacity: 0 !important;
+    pointer-events: none;
   }
 }
