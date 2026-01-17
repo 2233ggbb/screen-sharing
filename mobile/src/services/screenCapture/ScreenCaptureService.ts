@@ -42,6 +42,41 @@ export class ScreenCaptureService {
   }
 
   /**
+   * 检查是否在模拟器中运行
+   * 模拟器通常不支持屏幕捕获功能
+   */
+  private isEmulator(): boolean {
+    // Android 模拟器的一些特征
+    // 注意：这只是一个简单的检测方法，不一定100%准确
+    if (Platform.OS === 'android') {
+      const model = (Platform as any).constants?.Model || '';
+      const brand = (Platform as any).constants?.Brand || '';
+      const fingerprint = (Platform as any).constants?.Fingerprint || '';
+      
+      // 常见的模拟器特征
+      const emulatorIndicators = [
+        'sdk',
+        'google_sdk',
+        'emulator',
+        'generic',
+        'unknown',
+      ];
+      
+      const lowerModel = model.toLowerCase();
+      const lowerBrand = brand.toLowerCase();
+      const lowerFingerprint = fingerprint.toLowerCase();
+      
+      return emulatorIndicators.some(
+        (indicator) =>
+          lowerModel.includes(indicator) ||
+          lowerBrand.includes(indicator) ||
+          lowerFingerprint.includes(indicator)
+      );
+    }
+    return false;
+  }
+
+  /**
    * 请求屏幕捕获权限（Android）
    */
   async requestPermission(): Promise<boolean> {
@@ -52,6 +87,14 @@ export class ScreenCaptureService {
 
     if (!ScreenCaptureModule) {
       captureLogger.error('ScreenCaptureModule 未找到');
+      // 检测是否在模拟器中
+      if (this.isEmulator()) {
+        Alert.alert(
+          '模拟器不支持',
+          '屏幕共享功能在 Android 模拟器上不可用，请使用真机测试。\n\n移动端作为观看者仍可正常观看其他用户的屏幕共享。',
+          [{ text: '我知道了' }]
+        );
+      }
       return false;
     }
 

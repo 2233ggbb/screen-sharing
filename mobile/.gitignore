@@ -28,9 +28,14 @@ ios/.xcode.env.local
 !debug.keystore
 
 # Android Gradle
-android/.gradle
-android/app/build
-android/build
+android/.gradle/
+android/.kotlin/
+android/app/build/
+android/build/
+android/local.properties
+
+# APK 输出
+*.apk
 
 # node.js
 node_modules/

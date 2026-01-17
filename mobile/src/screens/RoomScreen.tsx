@@ -1,10 +1,18 @@
 /**
  * 房间界面
  * 屏幕共享和视频展示
+ * 支持横屏适配和优化的观看体验
  */
 
 import React, { useEffect, useCallback, useState } from 'react';
-import { View, StyleSheet, BackHandler, Alert } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  BackHandler,
+  Alert,
+  useWindowDimensions,
+  StatusBar,
+} from 'react-native';
 import {
   Text,
   IconButton,
@@ -40,6 +48,10 @@ const RoomScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const params = route.params as RouteParams;
 
+  // 屏幕尺寸和方向检测
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
+
   const { currentRoom, members, clearRoom } = useRoomStore();
   const { userId, nickname } = useUserStore();
   const {
@@ -57,6 +69,8 @@ const RoomScreen: React.FC = () => {
   const [showExitDialog, setShowExitDialog] = useState(false);
   const [showUserList, setShowUserList] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  // 紧凑模式：横屏时隐藏控制栏
+  const [compactMode, setCompactMode] = useState(false);
 
   // 设置 Socket 回调
   useEffect(() => {
@@ -261,24 +275,58 @@ const RoomScreen: React.FC = () => {
     return () => backHandler.remove();
   }, []);
 
+  // 横屏时自动启用紧凑模式
+  useEffect(() => {
+    if (isLandscape && remoteStreams.size > 0) {
+      setCompactMode(true);
+    }
+  }, [isLandscape, remoteStreams.size]);
+
+  // 切换紧凑模式
+  const toggleCompactMode = useCallback(() => {
+    setCompactMode((prev) => !prev);
+  }, []);
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* 顶部栏 */}
-      <View style={styles.header}>
-        <IconButton icon="arrow-left" onPress={() => setShowExitDialog(true)} />
-        <View style={styles.roomInfo}>
-          <Text variant="titleMedium" numberOfLines={1}>
-            {currentRoom?.name || '房间'}
-          </Text>
-          <Chip compact style={styles.roomIdChip}>
-            {params.roomId}
-          </Chip>
+    <SafeAreaView
+      style={styles.container}
+      edges={isLandscape ? [] : ['top']}
+    >
+      <StatusBar hidden={isLandscape && compactMode} />
+      
+      {/* 顶部栏 - 横屏紧凑模式下隐藏 */}
+      {!(isLandscape && compactMode) && (
+        <View style={[styles.header, isLandscape && styles.headerLandscape]}>
+          <IconButton
+            icon="arrow-left"
+            onPress={() => setShowExitDialog(true)}
+            size={isLandscape ? 20 : 24}
+          />
+          <View style={styles.roomInfo}>
+            <Text
+              variant={isLandscape ? 'bodyMedium' : 'titleMedium'}
+              numberOfLines={1}
+            >
+              {currentRoom?.name || '房间'}
+            </Text>
+            <Chip compact style={styles.roomIdChip}>
+              {params.roomId}
+            </Chip>
+          </View>
+          <IconButton
+            icon="account-group"
+            onPress={() => setShowUserList(true)}
+            size={isLandscape ? 20 : 24}
+          />
+          {isLandscape && (
+            <IconButton
+              icon={compactMode ? 'fullscreen' : 'fullscreen-exit'}
+              onPress={toggleCompactMode}
+              size={20}
+            />
+          )}
         </View>
-        <IconButton
-          icon="account-group"
-          onPress={() => setShowUserList(true)}
-        />
-      </View>
+      )}
 
       {/* 视频网格 */}
       <View style={styles.videoContainer}>
@@ -289,19 +337,42 @@ const RoomScreen: React.FC = () => {
           currentUserId={userId || ''}
           nickname={nickname}
         />
+        
+        {/* 横屏紧凑模式下的浮动控制按钮 */}
+        {isLandscape && compactMode && (
+          <View style={styles.floatingControls}>
+            <IconButton
+              icon="arrow-left"
+              iconColor="#fff"
+              size={24}
+              onPress={() => setShowExitDialog(true)}
+              style={styles.floatingButton}
+            />
+            <IconButton
+              icon="fullscreen-exit"
+              iconColor="#fff"
+              size={24}
+              onPress={toggleCompactMode}
+              style={styles.floatingButton}
+            />
+          </View>
+        )}
       </View>
 
-      {/* 控制栏 */}
-      <View style={styles.controls}>
-        <FAB
-          icon={isSharing ? 'stop' : 'monitor-share'}
-          label={isSharing ? '停止共享' : '共享屏幕'}
-          onPress={isSharing ? handleStopSharing : handleStartSharing}
-          loading={isConnecting}
-          disabled={isConnecting}
-          style={[styles.fab, isSharing && styles.fabStop]}
-        />
-      </View>
+      {/* 控制栏 - 横屏紧凑模式下隐藏 */}
+      {!(isLandscape && compactMode) && (
+        <View style={[styles.controls, isLandscape && styles.controlsLandscape]}>
+          <FAB
+            icon={isSharing ? 'stop' : 'monitor-share'}
+            label={isLandscape ? undefined : (isSharing ? '停止共享' : '共享屏幕')}
+            onPress={isSharing ? handleStopSharing : handleStartSharing}
+            loading={isConnecting}
+            disabled={isConnecting}
+            style={[styles.fab, isSharing && styles.fabStop]}
+            size={isLandscape ? 'small' : 'medium'}
+          />
+        </View>
+      )}
 
       {/* 退出确认弹窗 */}
       <Portal>
@@ -349,6 +420,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     backgroundColor: '#1f1f1f',
   },
+  headerLandscape: {
+    paddingVertical: 2,
+    paddingHorizontal: spacing.sm,
+  },
   roomInfo: {
     flex: 1,
     flexDirection: 'row',
@@ -360,17 +435,36 @@ const styles = StyleSheet.create({
   },
   videoContainer: {
     flex: 1,
+    position: 'relative',
   },
   controls: {
     padding: spacing.md,
     alignItems: 'center',
     backgroundColor: '#1f1f1f',
   },
+  controlsLandscape: {
+    padding: spacing.sm,
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
   fab: {
     borderRadius: borderRadius.full,
   },
   fabStop: {
     backgroundColor: '#ff4d4f',
+  },
+  floatingControls: {
+    position: 'absolute',
+    top: spacing.sm,
+    left: spacing.sm,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    zIndex: 10,
+  },
+  floatingButton: {
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: borderRadius.full,
+    margin: 0,
   },
   userListDialog: {
     maxHeight: '70%',

@@ -33,7 +33,17 @@ public class ScreenCaptureService extends Service {
         Log.d(TAG, "屏幕捕获服务已启动");
         
         createNotificationChannel();
-        startForeground(NOTIFICATION_ID, createNotification());
+        
+        // Android 14+ (API 34) requires foreground service type
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, createNotification(),
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, createNotification(),
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
+        } else {
+            startForeground(NOTIFICATION_ID, createNotification());
+        }
         
         return START_STICKY;
     }

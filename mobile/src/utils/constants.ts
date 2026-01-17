@@ -6,8 +6,10 @@
 declare const __DEV__: boolean;
 
 // 服务器配置
+// Android 模拟器使用 10.0.2.2 访问宿主机 localhost
+// 真机请替换为电脑的局域网 IP 地址
 export const SERVER_URL = __DEV__
-  ? 'http://192.168.1.100:3000' // 开发环境 - 请替换为实际 IP
+  ? 'http://10.0.2.2:3000' // 开发环境 - 模拟器使用 10.0.2.2，真机使用局域网 IP
   : 'https://your-production-server.com'; // 生产环境
 
 // WebRTC 配置类型

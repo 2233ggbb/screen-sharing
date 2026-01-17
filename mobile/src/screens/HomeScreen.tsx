@@ -18,11 +18,13 @@ import {
   Card,
   Snackbar,
   ActivityIndicator,
+  IconButton,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useUserStore } from '../store/useUserStore';
 import { useRoomStore } from '../store/useRoomStore';
+import { useSettingsStore } from '../store/useSettingsStore';
 import { socketService } from '../services/socket/SocketService';
 import { spacing, fontSize, borderRadius } from '../theme';
 
@@ -33,7 +35,8 @@ type NavigationProp = {
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const { nickname, setNickname, setUserId, setConnected } = useUserStore();
-  const { setCurrentRoom, setLoading, isLoading, error, setError } = useRoomStore();
+  const { setCurrentRoom, setLoading, isLoading, setError } = useRoomStore();
+  const { serverUrl } = useSettingsStore();
 
   const [roomId, setRoomId] = useState('');
   const [roomName, setRoomName] = useState('');
@@ -49,6 +52,8 @@ const HomeScreen: React.FC = () => {
   // 连接服务器并设置回调
   const connectAndSetupCallbacks = useCallback(async () => {
     try {
+      // 确保使用最新的服务器地址
+      socketService.updateServerUrl(serverUrl);
       await socketService.connect();
 
       socketService.setCallbacks({
@@ -79,11 +84,11 @@ const HomeScreen: React.FC = () => {
       });
 
       return true;
-    } catch (err) {
+    } catch {
       showSnackbar('连接服务器失败');
       return false;
     }
-  }, [navigation, setConnected, setCurrentRoom, setError, setLoading, setUserId, showSnackbar]);
+  }, [navigation, serverUrl, setConnected, setCurrentRoom, setError, setLoading, setUserId, showSnackbar]);
 
   // 创建房间
   const handleCreateRoom = useCallback(async () => {
@@ -92,10 +97,8 @@ const HomeScreen: React.FC = () => {
       return;
     }
 
-    if (!roomName.trim()) {
-      showSnackbar('请输入房间名称');
-      return;
-    }
+    // 如果没有填写房间名称，使用默认名称（与客户端保持一致）
+    const finalRoomName = roomName.trim() || `${nickname.trim()}的房间`;
 
     setLoading(true);
     setError(null);
@@ -107,7 +110,7 @@ const HomeScreen: React.FC = () => {
     }
 
     socketService.createRoom({
-      roomName: roomName.trim(),
+      roomName: finalRoomName,
       nickname: nickname.trim(),
     });
   }, [nickname, roomName, connectAndSetupCallbacks, setLoading, setError, showSnackbar]);
@@ -139,6 +142,11 @@ const HomeScreen: React.FC = () => {
     });
   }, [nickname, roomId, connectAndSetupCallbacks, setLoading, setError, showSnackbar]);
 
+  // 跳转到设置页面
+  const handleGoToSettings = useCallback(() => {
+    navigation.navigate('Settings');
+  }, [navigation]);
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView
@@ -149,11 +157,19 @@ const HomeScreen: React.FC = () => {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* 标题 */}
+          {/* 标题和设置按钮 */}
           <View style={styles.header}>
-            <Text variant="headlineLarge" style={styles.title}>
-              屏幕共享
-            </Text>
+            <View style={styles.titleRow}>
+              <Text variant="headlineLarge" style={styles.title}>
+                屏幕共享
+              </Text>
+              <IconButton
+                icon="cog"
+                size={24}
+                onPress={handleGoToSettings}
+                style={styles.settingsButton}
+              />
+            </View>
             <Text variant="bodyMedium" style={styles.subtitle}>
               多人实时屏幕共享协作平台
             </Text>
@@ -179,19 +195,22 @@ const HomeScreen: React.FC = () => {
             <Card.Title title="创建房间" titleVariant="titleMedium" />
             <Card.Content>
               <TextInput
-                label="房间名称"
+                label="房间名称（选填）"
                 value={roomName}
                 onChangeText={setRoomName}
                 mode="outlined"
-                placeholder="请输入房间名称"
+                placeholder={nickname ? `${nickname}的房间` : '请输入房间名称'}
                 maxLength={50}
                 style={styles.input}
               />
+              <Text variant="bodySmall" style={styles.hint}>
+                不填写则使用默认名称「昵称的房间」
+              </Text>
               <Button
                 mode="contained"
                 onPress={handleCreateRoom}
                 loading={isLoading}
-                disabled={isLoading}
+                disabled={isLoading || !nickname.trim()}
                 style={styles.button}
               >
                 创建房间
@@ -224,6 +243,16 @@ const HomeScreen: React.FC = () => {
               </Button>
             </Card.Content>
           </Card>
+
+          {/* 设置按钮 */}
+          <Button
+            mode="text"
+            onPress={handleGoToSettings}
+            icon="cog"
+            style={styles.settingsButtonBottom}
+          >
+            设置
+          </Button>
 
           {/* 加载指示器 */}
           {isLoading && (
@@ -267,9 +296,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginVertical: spacing.xl,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   title: {
     fontWeight: 'bold',
     color: '#1890ff',
+  },
+  settingsButton: {
+    position: 'absolute',
+    right: -48,
   },
   subtitle: {
     marginTop: spacing.sm,
@@ -280,10 +318,17 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
   },
   input: {
+    marginBottom: spacing.xs,
+  },
+  hint: {
+    opacity: 0.6,
     marginBottom: spacing.md,
   },
   button: {
     marginTop: spacing.sm,
+  },
+  settingsButtonBottom: {
+    marginTop: spacing.md,
   },
   loadingOverlay: {
     position: 'absolute',

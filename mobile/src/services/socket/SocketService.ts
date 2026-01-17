@@ -49,6 +49,24 @@ export class SocketService {
   }
 
   /**
+   * 更新服务器地址
+   * 如果已连接，将断开当前连接
+   */
+  updateServerUrl(serverUrl: string): void {
+    if (this.serverUrl === serverUrl) {
+      return;
+    }
+
+    socketLogger.info('更新服务器地址:', serverUrl);
+    this.serverUrl = serverUrl;
+
+    // 如果已连接，断开当前连接以便使用新地址
+    if (this.socket?.connected) {
+      this.disconnect();
+    }
+  }
+
+  /**
    * 连接到服务器
    */
   connect(): Promise<void> {

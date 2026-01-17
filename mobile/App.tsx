@@ -12,7 +12,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import HomeScreen from './src/screens/HomeScreen';
 import RoomScreen from './src/screens/RoomScreen';
-import { darkTheme } from './src/theme';
+import SettingsScreen from './src/screens/SettingsScreen';
+import { darkTheme, lightTheme } from './src/theme';
+import { useSettingsStore } from './src/store/useSettingsStore';
 
 // 忽略一些无关紧要的警告
 LogBox.ignoreLogs([
@@ -23,13 +25,15 @@ LogBox.ignoreLogs([
 export type RootStackParamList = {
   Home: undefined;
   Room: { roomId: string };
+  Settings: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const App: React.FC = () => {
-  // 使用暗色主题（与视频共享场景更匹配）
-  const theme = darkTheme;
+  // 根据设置选择主题
+  const themeSetting = useSettingsStore((state) => state.theme);
+  const theme = themeSetting === 'dark' ? darkTheme : lightTheme;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -50,6 +54,7 @@ const App: React.FC = () => {
             >
               <Stack.Screen name="Home" component={HomeScreen} />
               <Stack.Screen name="Room" component={RoomScreen} />
+              <Stack.Screen name="Settings" component={SettingsScreen} />
             </Stack.Navigator>
           </NavigationContainer>
         </PaperProvider>
@@ -59,5 +64,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-
-curl http://adminv2.jfcsdev.qiniu.io/fc-audit-api/v1/scheduledomainconfig/audit/pending/list -XPOST -d '{"page":1, "size":10}' -H "content-type: application/json"
