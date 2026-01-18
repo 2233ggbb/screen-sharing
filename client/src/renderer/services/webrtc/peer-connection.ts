@@ -164,18 +164,31 @@ export class PeerConnectionManager {
       }
     };
 
-    // 连接状态变化
+    // 连接状态变化 - 同时监听 connectionState（某些浏览器只触发这个）
     pc.onconnectionstatechange = () => {
-      logger.info(`连接状态变化 [${remoteUserId}]:`, pc.connectionState);
+      const connState = pc.connectionState;
+      logger.info(`连接状态变化 [${remoteUserId}]:`, connState);
+      
+      console.log(`[P2P] 连接状态变化 [${remoteUserId}]:`, {
+        connectionState: connState,
+        iceConnectionState: pc.iceConnectionState,
+      });
+      
       if (handlers.onConnectionStateChange) {
-        handlers.onConnectionStateChange(pc.connectionState);
+        handlers.onConnectionStateChange(connState);
       }
 
-      // 只在连接关闭时清理，失败时让 ICE 重启机制处理
-      if (pc.connectionState === 'closed') {
+      // 连接失败时触发 ICE 重启（某些浏览器 iceConnectionState 不会变成 failed）
+      if (connState === 'failed') {
+        console.error(`[P2P] connectionState 变为 failed [${remoteUserId}]`);
+        // 如果 iceConnectionState 没有触发 handleIceFailure，这里触发
+        if (pc.iceConnectionState !== 'failed') {
+          console.log('[P2P] iceConnectionState 未 failed，在此触发 ICE 重启');
+          this.handleIceFailure(remoteUserId, pc);
+        }
+      } else if (connState === 'closed') {
         this.closeConnection(remoteUserId);
       }
-      // 注意：不再在 failed 时立即关闭，让 handleIceFailure 有机会尝试 ICE 重启
     };
 
     this.peerConnections.set(remoteUserId, pc);
