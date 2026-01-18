@@ -65,19 +65,36 @@ export class PeerConnectionManager {
     // ICE候选事件 - Trickle ICE：边收集边发送
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        // 醒目的日志，方便在控制台中查找
-        console.log('%c[ICE] ★★★ 本地ICE候选生成 ★★★', 'color: green; font-weight: bold;', {
+        const candidateType = event.candidate.type;
+        
+        // 根据候选类型使用不同颜色
+        // relay = TURN 中继（红色，最重要）
+        // srflx = STUN 反射（黄色）
+        // host = 本地（绿色）
+        let color = 'color: green; font-weight: bold;';
+        let label = '本地';
+        if (candidateType === 'relay') {
+          color = 'color: red; font-weight: bold; font-size: 14px;';
+          label = 'TURN中继';
+        } else if (candidateType === 'srflx') {
+          color = 'color: orange; font-weight: bold;';
+          label = 'STUN反射';
+        }
+        
+        console.log(`%c[ICE] ★★★ ${label}候选生成 ★★★`, color, {
           remoteUserId,
-          type: event.candidate.type,
+          type: candidateType,
           protocol: event.candidate.protocol,
           address: event.candidate.address,
           port: event.candidate.port,
+          relatedAddress: event.candidate.relatedAddress,
+          relatedPort: event.candidate.relatedPort,
         });
         console.log('[ICE] 候选字符串:', event.candidate.candidate);
         
         logger.info('本地ICE候选:', {
           remoteUserId,
-          type: event.candidate.type,
+          type: candidateType,
           address: event.candidate.address,
         });
         

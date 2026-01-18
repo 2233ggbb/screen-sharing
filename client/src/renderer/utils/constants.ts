@@ -2,17 +2,48 @@
  * 客户端常量定义
  */
 
-// WebRTC配置 - 针对 P2P 直连优化（不使用 TURN）
+// WebRTC配置 - 包含 TURN 中继服务器以支持对称型 NAT
 export const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
     // STUN 服务器 - 用于获取公网 IP 和 NAT 穿透
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
+    // TURN 服务器 - 当直接连接失败时作为中继
+    // 使用 Open Relay Project 提供的公共 TURN 服务器
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    // 备用 TURN 服务器 - Metered 免费额度
+    {
+      urls: 'turn:a.relay.metered.ca:80',
+      username: 'e8dd65c92f62d6c9c1bc6723',
+      credential: 'dxVA2xhtcSPxgxaC',
+    },
+    {
+      urls: 'turn:a.relay.metered.ca:443',
+      username: 'e8dd65c92f62d6c9c1bc6723',
+      credential: 'dxVA2xhtcSPxgxaC',
+    },
+    {
+      urls: 'turn:a.relay.metered.ca:443?transport=tcp',
+      username: 'e8dd65c92f62d6c9c1bc6723',
+      credential: 'dxVA2xhtcSPxgxaC',
+    },
   ],
-  // ICE 传输策略：all 尝试所有可用的连接方式
+  // ICE 传输策略：all 尝试所有可用的连接方式（包括 relay）
   iceTransportPolicy: 'all',
   // 启用 ICE 候选池，预先收集候选以加快连接
   iceCandidatePoolSize: 10,
