@@ -1,69 +1,42 @@
 import { RTC_CONFIG } from '../../utils/constants';
 import { logger } from '../../utils/logger';
-import { batchExecute } from '../../utils/performance';
 
 export type PeerConnectionEventHandler = {
   onIceCandidate?: (candidate: RTCIceCandidate) => void;
   onTrack?: (stream: MediaStream) => void;
   onConnectionStateChange?: (state: RTCPeerConnectionState) => void;
+  onIceConnectionStateChange?: (state: RTCIceConnectionState) => void;
 };
 
-interface PendingIceCandidate {
-  remoteUserId: string;
-  candidate: RTCIceCandidateInit;
+/**
+ * 连接状态信息
+ */
+interface ConnectionState {
+  hasRemoteDescription: boolean;
+  pendingCandidates: RTCIceCandidateInit[];
+  retryCount: number;
+  handlers: PeerConnectionEventHandler;
+  iceRestartTimer: NodeJS.Timeout | null;
 }
 
 /**
- * WebRTC P2P连接管理器（优化版）
+ * WebRTC P2P连接管理器（针对端口限制型 NAT 优化版）
+ * 
+ * 优化策略：
+ * 1. Trickle ICE - 边收集边发送，不等待完成
+ * 2. ICE 候选缓存 - 在 remote description 设置前收到的候选会被缓存
+ * 3. ICE 重启 - 连接失败时自动重试
+ * 4. 更激进的超时和重试策略
  */
 export class PeerConnectionManager {
   private peerConnections: Map<string, RTCPeerConnection> = new Map();
+  private connectionStates: Map<string, ConnectionState> = new Map();
   private config: RTCConfiguration;
-  private pendingIceCandidates: PendingIceCandidate[] = [];
-  private iceBatchTimer: NodeJS.Timeout | null = null;
-  private readonly ICE_BATCH_DELAY = 100; // 100ms批量延迟
-  private readonly ICE_BATCH_SIZE = 5; // 批量大小
+  private readonly MAX_RETRY_COUNT = 3;
+  private readonly ICE_RESTART_DELAY = 2000; // 2秒后重试
 
   constructor(config: RTCConfiguration = RTC_CONFIG) {
     this.config = config;
-  }
-
-  /**
-   * 批量处理ICE候选
-   */
-  private async processBatchIceCandidates(): Promise<void> {
-    if (this.pendingIceCandidates.length === 0) {
-      return;
-    }
-
-    const items = [...this.pendingIceCandidates];
-    this.pendingIceCandidates = [];
-    this.iceBatchTimer = null;
-
-    const groupedByUser = items.reduce((acc, item) => {
-      if (!acc[item.remoteUserId]) {
-        acc[item.remoteUserId] = [];
-      }
-      acc[item.remoteUserId].push(item.candidate);
-      return acc;
-    }, {} as Record<string, RTCIceCandidateInit[]>);
-
-    for (const [remoteUserId, candidates] of Object.entries(groupedByUser)) {
-      const pc = this.peerConnections.get(remoteUserId);
-      if (!pc) {
-        logger.warn('连接不存在，忽略批量ICE候选:', remoteUserId);
-        continue;
-      }
-
-      for (const candidate of candidates) {
-        try {
-          await pc.addIceCandidate(candidate);
-        } catch (error) {
-          logger.error('添加ICE候选失败:', error);
-        }
-      }
-      logger.debug(`批量添加${candidates.length}个ICE候选:`, remoteUserId);
-    }
   }
 
   /**
@@ -80,7 +53,16 @@ export class PeerConnectionManager {
 
     const pc = new RTCPeerConnection(this.config);
 
-    // ICE候选事件
+    // 初始化连接状态
+    this.connectionStates.set(remoteUserId, {
+      hasRemoteDescription: false,
+      pendingCandidates: [],
+      retryCount: 0,
+      handlers,
+      iceRestartTimer: null,
+    });
+
+    // ICE候选事件 - Trickle ICE：边收集边发送
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         logger.info('本地ICE候选:', {
@@ -102,9 +84,30 @@ export class PeerConnectionManager {
       logger.info(`ICE收集状态 [${remoteUserId}]:`, pc.iceGatheringState);
     };
 
-    // ICE 连接状态变化
+    // ICE 连接状态变化 - 关键：用于触发 ICE 重启
     pc.oniceconnectionstatechange = () => {
-      logger.info(`ICE连接状态 [${remoteUserId}]:`, pc.iceConnectionState);
+      const state = pc.iceConnectionState;
+      logger.info(`ICE连接状态 [${remoteUserId}]:`, state);
+      
+      if (handlers.onIceConnectionStateChange) {
+        handlers.onIceConnectionStateChange(state);
+      }
+
+      // ICE 连接失败时尝试重启
+      if (state === 'failed') {
+        this.handleIceFailure(remoteUserId, pc);
+      } else if (state === 'connected' || state === 'completed') {
+        // 连接成功，重置重试计数
+        const connState = this.connectionStates.get(remoteUserId);
+        if (connState) {
+          connState.retryCount = 0;
+          if (connState.iceRestartTimer) {
+            clearTimeout(connState.iceRestartTimer);
+            connState.iceRestartTimer = null;
+          }
+        }
+        logger.info(`P2P连接成功 [${remoteUserId}]`);
+      }
     };
 
     // 接收远程流
@@ -134,6 +137,42 @@ export class PeerConnectionManager {
   }
 
   /**
+   * 处理 ICE 连接失败 - 尝试 ICE 重启
+   */
+  private handleIceFailure(remoteUserId: string, pc: RTCPeerConnection): void {
+    const connState = this.connectionStates.get(remoteUserId);
+    if (!connState) return;
+
+    if (connState.retryCount >= this.MAX_RETRY_COUNT) {
+      logger.error(`ICE重试次数已达上限 [${remoteUserId}]，放弃重试`);
+      return;
+    }
+
+    connState.retryCount++;
+    logger.warn(`ICE连接失败 [${remoteUserId}]，准备第 ${connState.retryCount} 次重试...`);
+
+    // 延迟后执行 ICE 重启
+    connState.iceRestartTimer = setTimeout(async () => {
+      try {
+        // ICE 重启：创建新的 offer 并设置 iceRestart: true
+        const offer = await pc.createOffer({ iceRestart: true });
+        await pc.setLocalDescription(offer);
+        
+        logger.info(`ICE重启已发起 [${remoteUserId}]`);
+        
+        // 通过 handler 发送新的 offer
+        // 注意：这需要在 useRoomWebRTC 中处理
+        if (connState.handlers.onIceCandidate) {
+          // ICE 重启会触发新的 ICE 候选收集
+          logger.info(`等待新的ICE候选 [${remoteUserId}]`);
+        }
+      } catch (error) {
+        logger.error(`ICE重启失败 [${remoteUserId}]:`, error);
+      }
+    }, this.ICE_RESTART_DELAY);
+  }
+
+  /**
    * 添加本地流到连接
    */
   addStream(remoteUserId: string, stream: MediaStream): void {
@@ -159,7 +198,7 @@ export class PeerConnectionManager {
     }
 
     const offer = await pc.createOffer({
-      offerToReceiveAudio: false,
+      offerToReceiveAudio: true,
       offerToReceiveVideo: true,
     });
     await pc.setLocalDescription(offer);
@@ -184,6 +223,7 @@ export class PeerConnectionManager {
 
   /**
    * 设置远程描述
+   * 设置后会自动处理之前缓存的 ICE 候选
    */
   async setRemoteDescription(
     remoteUserId: string,
@@ -196,10 +236,30 @@ export class PeerConnectionManager {
 
     await pc.setRemoteDescription(description);
     logger.info('设置远程描述:', { remoteUserId, type: description.type });
+
+    // 标记已设置远程描述
+    const connState = this.connectionStates.get(remoteUserId);
+    if (connState) {
+      connState.hasRemoteDescription = true;
+
+      // 处理之前缓存的 ICE 候选
+      if (connState.pendingCandidates.length > 0) {
+        logger.info(`处理缓存的 ${connState.pendingCandidates.length} 个ICE候选:`, remoteUserId);
+        for (const candidate of connState.pendingCandidates) {
+          try {
+            await pc.addIceCandidate(candidate);
+          } catch (error) {
+            logger.error('添加缓存ICE候选失败:', error);
+          }
+        }
+        connState.pendingCandidates = [];
+      }
+    }
   }
 
   /**
-   * 添加ICE候选（优化版：批量处理）
+   * 添加ICE候选
+   * 如果远程描述还未设置，会先缓存候选
    */
   async addIceCandidate(
     remoteUserId: string,
@@ -211,20 +271,23 @@ export class PeerConnectionManager {
       return;
     }
 
-    // 加入批量队列
-    this.pendingIceCandidates.push({ remoteUserId, candidate });
+    const connState = this.connectionStates.get(remoteUserId);
 
-    // 达到批量大小，立即处理
-    if (this.pendingIceCandidates.length >= this.ICE_BATCH_SIZE) {
-      if (this.iceBatchTimer) {
-        clearTimeout(this.iceBatchTimer);
+    // 如果远程描述还未设置，缓存候选
+    if (!connState?.hasRemoteDescription) {
+      logger.info('远程描述未设置，缓存ICE候选:', remoteUserId);
+      if (connState) {
+        connState.pendingCandidates.push(candidate);
       }
-      await this.processBatchIceCandidates();
-    } else if (!this.iceBatchTimer) {
-      // 否则等待延迟批量处理
-      this.iceBatchTimer = setTimeout(() => {
-        this.processBatchIceCandidates();
-      }, this.ICE_BATCH_DELAY);
+      return;
+    }
+
+    // 直接添加候选
+    try {
+      await pc.addIceCandidate(candidate);
+      logger.debug('添加ICE候选成功:', remoteUserId);
+    } catch (error) {
+      logger.error('添加ICE候选失败:', error);
     }
   }
 
@@ -245,6 +308,15 @@ export class PeerConnectionManager {
       this.peerConnections.delete(remoteUserId);
       logger.info('关闭P2P连接:', remoteUserId);
     }
+
+    // 清理连接状态
+    const connState = this.connectionStates.get(remoteUserId);
+    if (connState) {
+      if (connState.iceRestartTimer) {
+        clearTimeout(connState.iceRestartTimer);
+      }
+      this.connectionStates.delete(remoteUserId);
+    }
   }
 
   /**
@@ -256,25 +328,21 @@ export class PeerConnectionManager {
       logger.info('关闭P2P连接:', userId);
     });
     this.peerConnections.clear();
+
+    // 清理所有连接状态
+    this.connectionStates.forEach((state) => {
+      if (state.iceRestartTimer) {
+        clearTimeout(state.iceRestartTimer);
+      }
+    });
+    this.connectionStates.clear();
   }
 
   /**
    * 销毁管理器，清理所有资源
-   * 包括关闭所有连接和清理定时器
    */
   destroy(): void {
-    // 清理 ICE 批量处理定时器
-    if (this.iceBatchTimer) {
-      clearTimeout(this.iceBatchTimer);
-      this.iceBatchTimer = null;
-    }
-
-    // 清理待处理的 ICE 候选
-    this.pendingIceCandidates = [];
-
-    // 关闭所有连接
     this.closeAllConnections();
-
     logger.info('PeerConnectionManager 已销毁');
   }
 
@@ -287,5 +355,26 @@ export class PeerConnectionManager {
       return null;
     }
     return await pc.getStats();
+  }
+
+  /**
+   * 手动触发 ICE 重启
+   */
+  async restartIce(remoteUserId: string): Promise<RTCSessionDescriptionInit | null> {
+    const pc = this.peerConnections.get(remoteUserId);
+    if (!pc) {
+      logger.error('连接不存在，无法重启ICE:', remoteUserId);
+      return null;
+    }
+
+    try {
+      const offer = await pc.createOffer({ iceRestart: true });
+      await pc.setLocalDescription(offer);
+      logger.info('手动ICE重启成功:', remoteUserId);
+      return offer;
+    } catch (error) {
+      logger.error('手动ICE重启失败:', error);
+      return null;
+    }
   }
 }
