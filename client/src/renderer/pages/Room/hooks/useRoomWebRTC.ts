@@ -182,13 +182,22 @@ export function useRoomWebRTC({ roomId }: UseRoomWebRTCOptions) {
    */
   const handleIceCandidate = useCallback(
     async (data: WebRTCIceCandidateData) => {
+      console.log('[useRoomWebRTC] 处理远程ICE候选:', {
+        fromUserId: data.fromUserId,
+        candidate: data.candidate?.candidate?.substring(0, 50) + '...',
+      });
       // 转换类型：IceCandidate -> RTCIceCandidateInit
       const candidateInit: RTCIceCandidateInit = {
         candidate: data.candidate.candidate,
         sdpMLineIndex: data.candidate.sdpMLineIndex,
         sdpMid: data.candidate.sdpMid,
       };
-      await peerManager.addIceCandidate(data.fromUserId, candidateInit);
+      try {
+        await peerManager.addIceCandidate(data.fromUserId, candidateInit);
+        console.log('[useRoomWebRTC] ICE候选已添加:', data.fromUserId);
+      } catch (error) {
+        console.error('[useRoomWebRTC] 添加ICE候选失败:', error);
+      }
     },
     [peerManager]
   );

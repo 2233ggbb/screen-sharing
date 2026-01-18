@@ -1,6 +1,6 @@
 {
   "name": "@screen-sharing/server",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "description": "多人屏幕共享系统 - 信令服务器",
   "main": "dist/index.js",
   "scripts": {

@@ -185,7 +185,10 @@ export class SocketService {
     });
 
     this.socket.on(SocketEvents.WEBRTC_ICE_CANDIDATE, (data: WebRTCIceCandidateData) => {
-      logger.debug('收到ICE候选:', data.fromUserId);
+      logger.info('收到远程ICE候选:', {
+        fromUserId: data.fromUserId,
+        type: data.candidate?.candidate?.split(' ')[7] || 'unknown', // 解析候选类型
+      });
       this.handlers.onWebRTCIceCandidate?.(data);
     });
 
@@ -283,6 +286,10 @@ export class SocketService {
     targetUserId: string;
     candidate: RTCIceCandidate;
   }): Promise<void> {
+    logger.info('发送ICE候选:', {
+      to: payload.targetUserId,
+      type: payload.candidate?.candidate?.split(' ')[7] || 'unknown',
+    });
     return this.emit(SocketEvents.SEND_ICE_CANDIDATE, payload);
   }
 

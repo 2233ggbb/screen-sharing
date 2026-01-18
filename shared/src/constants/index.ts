@@ -79,15 +79,32 @@ export const SHARE_CONSTANTS = {
 
 /**
  * WebRTC配置常量
+ * 注意：生产环境应使用自建的 TURN 服务器以确保稳定性
  */
 export const WEBRTC_CONSTANTS = {
   /** ICE服务器配置 */
   ICE_SERVERS: [
+    // STUN 服务器
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    // 公共 TURN 服务器（OpenRelay - 免费测试用）
     {
-      urls: 'stun:stun.l.google.com:19302',
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
     },
     {
-      urls: 'stun:stun1.l.google.com:19302',
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
     },
   ],
   /** 连接超时时间 (ms) */

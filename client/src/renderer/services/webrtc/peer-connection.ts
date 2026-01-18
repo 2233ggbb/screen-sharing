@@ -82,9 +82,29 @@ export class PeerConnectionManager {
 
     // ICE候选事件
     pc.onicecandidate = (event) => {
-      if (event.candidate && handlers.onIceCandidate) {
-        handlers.onIceCandidate(event.candidate);
+      if (event.candidate) {
+        logger.info('本地ICE候选:', {
+          remoteUserId,
+          type: event.candidate.type,
+          protocol: event.candidate.protocol,
+          address: event.candidate.address,
+        });
+        if (handlers.onIceCandidate) {
+          handlers.onIceCandidate(event.candidate);
+        }
+      } else {
+        logger.info('ICE候选收集完成:', remoteUserId);
       }
+    };
+
+    // ICE 收集状态变化
+    pc.onicegatheringstatechange = () => {
+      logger.info(`ICE收集状态 [${remoteUserId}]:`, pc.iceGatheringState);
+    };
+
+    // ICE 连接状态变化
+    pc.oniceconnectionstatechange = () => {
+      logger.info(`ICE连接状态 [${remoteUserId}]:`, pc.iceConnectionState);
     };
 
     // 接收远程流

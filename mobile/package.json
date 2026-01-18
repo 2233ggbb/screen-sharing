@@ -1,6 +1,6 @@
 {
   "name": "screen-sharing-mobile",
-  "version": "1.0.0",
+  "version": "1.0.4",
   "description": "多人屏幕共享系统 - React Native 移动端",
   "private": true,
   "scripts": {

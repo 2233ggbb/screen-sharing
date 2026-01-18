@@ -20,15 +20,39 @@ interface RTCConfig {
     credential?: string;
   }>;
   iceCandidatePoolSize?: number;
+  iceTransportPolicy?: 'all' | 'relay';
 }
 
+// WebRTC 配置
+// 注意：生产环境应使用自建的 TURN 服务器以确保稳定性
 export const RTC_CONFIG: RTCConfig = {
   iceServers: [
+    // STUN 服务器 - 用于获取公网 IP
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    // 公共 TURN 服务器 - 用于 NAT 穿透失败时的中继
+    // 使用 OpenRelay 公共 TURN 服务器（免费，适合测试）
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
   ],
   iceCandidatePoolSize: 10,
+  iceTransportPolicy: 'all',
 };
 
 // 屏幕共享配置
