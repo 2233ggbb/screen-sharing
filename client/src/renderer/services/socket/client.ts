@@ -142,52 +142,83 @@ export class SocketService {
   private setupEventListeners(): void {
     if (!this.socket) return;
 
+    console.log('[Socket] 设置事件监听器');
+
     // 房间事件
     this.socket.on(SocketEvents.ROOM_CREATED, (data: RoomCreatedPayload) => {
       logger.info('房间已创建:', data);
+      console.log('[Socket] 事件: ROOM_CREATED', data);
       this.handlers.onRoomCreated?.(data);
     });
 
     this.socket.on(SocketEvents.ROOM_JOINED, (data: RoomJoinedPayload) => {
       logger.info('加入房间成功:', data);
+      console.log('[Socket] 事件: ROOM_JOINED', data);
       this.handlers.onRoomJoined?.(data);
     });
 
     this.socket.on(SocketEvents.USER_JOINED, (data: UserJoinedPayload) => {
       logger.info('用户加入:', data);
+      console.log('[Socket] 事件: USER_JOINED', data);
       this.handlers.onUserJoined?.(data);
     });
 
     this.socket.on(SocketEvents.USER_LEFT, (data: UserLeftPayload) => {
       logger.info('用户离开:', data);
+      console.log('[Socket] 事件: USER_LEFT', data);
       this.handlers.onUserLeft?.(data);
     });
 
     this.socket.on(SocketEvents.USER_START_SHARING, (data: UserStartSharingPayload) => {
       logger.info('用户开始共享:', data);
+      console.log('[Socket] 事件: USER_START_SHARING', data);
       this.handlers.onUserStartSharing?.(data);
     });
 
     this.socket.on(SocketEvents.USER_STOP_SHARING, (data: UserStopSharingPayload) => {
       logger.info('用户停止共享:', data);
+      console.log('[Socket] 事件: USER_STOP_SHARING', data);
       this.handlers.onUserStopSharing?.(data);
     });
 
-    // WebRTC信令事件 - 使用 ServerEventParams 中定义的正确类型
+    // WebRTC信令事件 - 详细日志
     this.socket.on(SocketEvents.WEBRTC_OFFER, (data: WebRTCOfferData) => {
       logger.info('收到Offer:', data.fromUserId);
+      console.log('[Socket] 事件: WEBRTC_OFFER', {
+        fromUserId: data.fromUserId,
+        sdpType: data.offer?.type,
+        sdpLength: data.offer?.sdp?.length,
+      });
       this.handlers.onWebRTCOffer?.(data);
     });
 
     this.socket.on(SocketEvents.WEBRTC_ANSWER, (data: WebRTCAnswerData) => {
       logger.info('收到Answer:', data.fromUserId);
+      console.log('[Socket] 事件: WEBRTC_ANSWER', {
+        fromUserId: data.fromUserId,
+        sdpType: data.answer?.type,
+        sdpLength: data.answer?.sdp?.length,
+      });
       this.handlers.onWebRTCAnswer?.(data);
     });
 
     this.socket.on(SocketEvents.WEBRTC_ICE_CANDIDATE, (data: WebRTCIceCandidateData) => {
+      // 解析ICE候选类型
+      const candidateStr = data.candidate?.candidate || '';
+      const parts = candidateStr.split(' ');
+      const candidateType = parts[7] || 'unknown'; // typ 后面的值
+      
       logger.info('收到远程ICE候选:', {
         fromUserId: data.fromUserId,
-        type: data.candidate?.candidate?.split(' ')[7] || 'unknown', // 解析候选类型
+        type: candidateType,
+      });
+      console.log('[Socket] 事件: WEBRTC_ICE_CANDIDATE', {
+        fromUserId: data.fromUserId,
+        type: candidateType,
+        protocol: parts[2], // udp/tcp
+        address: parts[4],  // IP地址
+        port: parts[5],     // 端口
+        candidate: candidateStr.substring(0, 80) + '...',
       });
       this.handlers.onWebRTCIceCandidate?.(data);
     });
@@ -251,7 +282,7 @@ export class SocketService {
   }
 
   /**
-   * 发送 Offer 的参数类型
+   * 发送 Offer
    */
   sendOffer(payload: {
     roomId: string;
@@ -260,11 +291,16 @@ export class SocketService {
     targetUserId: string;
     offer: RTCSessionDescriptionData;
   }): Promise<void> {
+    console.log('[Socket] 发送: SEND_OFFER', {
+      to: payload.targetUserId,
+      sdpType: payload.offer?.type,
+      sdpLength: payload.offer?.sdp?.length,
+    });
     return this.emit(SocketEvents.SEND_OFFER, payload);
   }
 
   /**
-   * 发送 Answer 的参数类型
+   * 发送 Answer
    */
   sendAnswer(payload: {
     roomId: string;
@@ -273,6 +309,11 @@ export class SocketService {
     targetUserId: string;
     answer: RTCSessionDescriptionData;
   }): Promise<void> {
+    console.log('[Socket] 发送: SEND_ANSWER', {
+      to: payload.targetUserId,
+      sdpType: payload.answer?.type,
+      sdpLength: payload.answer?.sdp?.length,
+    });
     return this.emit(SocketEvents.SEND_ANSWER, payload);
   }
 
@@ -286,9 +327,16 @@ export class SocketService {
     targetUserId: string;
     candidate: RTCIceCandidate;
   }): Promise<void> {
-    logger.info('发送ICE候选:', {
+    const candidateStr = payload.candidate?.candidate || '';
+    const parts = candidateStr.split(' ');
+    const candidateType = parts[7] || 'unknown';
+    
+    console.log('[Socket] 发送: SEND_ICE_CANDIDATE', {
       to: payload.targetUserId,
-      type: payload.candidate?.candidate?.split(' ')[7] || 'unknown',
+      type: candidateType,
+      protocol: parts[2],
+      address: parts[4],
+      port: parts[5],
     });
     return this.emit(SocketEvents.SEND_ICE_CANDIDATE, payload);
   }
