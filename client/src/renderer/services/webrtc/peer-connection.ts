@@ -65,28 +65,31 @@ export class PeerConnectionManager {
     // ICE候选事件 - Trickle ICE：边收集边发送
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        // 打印完整的候选信息以便调试
-        const candidateInfo = {
+        // 醒目的日志，方便在控制台中查找
+        console.log('%c[ICE] ★★★ 本地ICE候选生成 ★★★', 'color: green; font-weight: bold;', {
           remoteUserId,
           type: event.candidate.type,
           protocol: event.candidate.protocol,
           address: event.candidate.address,
           port: event.candidate.port,
-          priority: event.candidate.priority,
-          foundation: event.candidate.foundation,
-          relatedAddress: event.candidate.relatedAddress,
-          relatedPort: event.candidate.relatedPort,
-        };
-        logger.info('本地ICE候选:', candidateInfo);
-        console.log('[ICE] 本地候选详情:', event.candidate.candidate);
+        });
+        console.log('[ICE] 候选字符串:', event.candidate.candidate);
+        
+        logger.info('本地ICE候选:', {
+          remoteUserId,
+          type: event.candidate.type,
+          address: event.candidate.address,
+        });
         
         if (handlers.onIceCandidate) {
+          console.log('[ICE] 调用 onIceCandidate 回调发送候选...');
           handlers.onIceCandidate(event.candidate);
+        } else {
+          console.error('[ICE] ✗ onIceCandidate 回调未设置！');
         }
       } else {
+        console.log('%c[ICE] ★★★ ICE候选收集完成 ★★★', 'color: blue; font-weight: bold;', remoteUserId);
         logger.info('ICE候选收集完成:', remoteUserId);
-        // 打印所有收集到的候选类型统计
-        console.log('[ICE] 收集完成，等待连接...');
       }
     };
 
