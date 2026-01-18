@@ -65,17 +65,28 @@ export class PeerConnectionManager {
     // ICE候选事件 - Trickle ICE：边收集边发送
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        logger.info('本地ICE候选:', {
+        // 打印完整的候选信息以便调试
+        const candidateInfo = {
           remoteUserId,
           type: event.candidate.type,
           protocol: event.candidate.protocol,
           address: event.candidate.address,
-        });
+          port: event.candidate.port,
+          priority: event.candidate.priority,
+          foundation: event.candidate.foundation,
+          relatedAddress: event.candidate.relatedAddress,
+          relatedPort: event.candidate.relatedPort,
+        };
+        logger.info('本地ICE候选:', candidateInfo);
+        console.log('[ICE] 本地候选详情:', event.candidate.candidate);
+        
         if (handlers.onIceCandidate) {
           handlers.onIceCandidate(event.candidate);
         }
       } else {
         logger.info('ICE候选收集完成:', remoteUserId);
+        // 打印所有收集到的候选类型统计
+        console.log('[ICE] 收集完成，等待连接...');
       }
     };
 
@@ -89,13 +100,28 @@ export class PeerConnectionManager {
       const state = pc.iceConnectionState;
       logger.info(`ICE连接状态 [${remoteUserId}]:`, state);
       
+      // 打印更详细的连接信息
+      console.log(`[ICE] 连接状态变化 [${remoteUserId}]:`, {
+        iceConnectionState: pc.iceConnectionState,
+        iceGatheringState: pc.iceGatheringState,
+        connectionState: pc.connectionState,
+        signalingState: pc.signalingState,
+      });
+      
       if (handlers.onIceConnectionStateChange) {
         handlers.onIceConnectionStateChange(state);
       }
 
       // ICE 连接失败时尝试重启
       if (state === 'failed') {
+        console.error(`[ICE] 连接失败 [${remoteUserId}]，可能原因：`);
+        console.error('1. 双方都是对称型/端口限制型 NAT，无法直接打洞');
+        console.error('2. 防火墙阻止了 UDP 流量');
+        console.error('3. ICE 候选没有正确交换');
         this.handleIceFailure(remoteUserId, pc);
+      } else if (state === 'disconnected') {
+        // disconnected 状态可能是临时的，等待一段时间看是否恢复
+        console.warn(`[ICE] 连接断开 [${remoteUserId}]，等待恢复...`);
       } else if (state === 'connected' || state === 'completed') {
         // 连接成功，重置重试计数
         const connState = this.connectionStates.get(remoteUserId);
@@ -107,6 +133,7 @@ export class PeerConnectionManager {
           }
         }
         logger.info(`P2P连接成功 [${remoteUserId}]`);
+        console.log(`[ICE] ✓ P2P直连成功！ [${remoteUserId}]`);
       }
     };
 

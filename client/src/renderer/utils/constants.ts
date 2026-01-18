@@ -2,38 +2,24 @@
  * 客户端常量定义
  */
 
-// WebRTC配置
-// 注意：生产环境应使用自建的 TURN 服务器以确保稳定性
+// WebRTC配置 - 针对 P2P 直连优化（不使用 TURN）
 export const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
-    // STUN 服务器 - 用于获取公网 IP
+    // STUN 服务器 - 用于获取公网 IP 和 NAT 穿透
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
-    // 公共 TURN 服务器 - 用于 NAT 穿透失败时的中继
-    // 使用 OpenRelay 公共 TURN 服务器（免费，适合测试）
-    {
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
   ],
-  // ICE 传输策略：all 表示同时尝试直连和中继
+  // ICE 传输策略：all 尝试所有可用的连接方式
   iceTransportPolicy: 'all',
-  // 启用 ICE 候选池，加快连接建立
+  // 启用 ICE 候选池，预先收集候选以加快连接
   iceCandidatePoolSize: 10,
+  // bundlePolicy: 将所有媒体流合并到一个传输通道，减少需要打通的端口数
+  bundlePolicy: 'max-bundle',
+  // rtcpMuxPolicy: 复用 RTP 和 RTCP 到同一端口
+  rtcpMuxPolicy: 'require',
 };
 
 // 视频流配置

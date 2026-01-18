@@ -167,12 +167,20 @@ export function useRoomWebRTC({ roomId }: UseRoomWebRTCOptions) {
    */
   const handleWebRTCAnswer = useCallback(
     async (data: WebRTCAnswerData) => {
+      console.log('[useRoomWebRTC] 处理Answer，fromUserId:', data.fromUserId);
+      
       // 转换类型：RTCSessionDescriptionData -> RTCSessionDescriptionInit
       const answerInit: RTCSessionDescriptionInit = {
         type: data.answer.type,
         sdp: data.answer.sdp,
       };
-      await peerManager.setRemoteDescription(data.fromUserId, answerInit);
+      
+      try {
+        await peerManager.setRemoteDescription(data.fromUserId, answerInit);
+        console.log('[useRoomWebRTC] Answer处理完成，远程描述已设置:', data.fromUserId);
+      } catch (error) {
+        console.error('[useRoomWebRTC] 设置远程描述失败:', error);
+      }
     },
     [peerManager]
   );
