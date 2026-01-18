@@ -42,8 +42,16 @@ export function useRoomWebRTC({ roomId }: UseRoomWebRTCOptions) {
    */
   const sendOfferToUser = useCallback(
     async (targetUserId: string, stream: MediaStream) => {
+      console.log('[useRoomWebRTC] 开始创建连接并发送Offer to:', targetUserId);
+      
       const pc = peerManager.createConnection(targetUserId, {
         onIceCandidate: (candidate) => {
+          console.log('[useRoomWebRTC] 本地ICE候选生成，准备发送:', {
+            to: targetUserId,
+            type: candidate.type,
+            address: candidate.address,
+            port: candidate.port,
+          });
           socketService.sendIceCandidate({
             roomId,
             from: userId,
@@ -53,6 +61,7 @@ export function useRoomWebRTC({ roomId }: UseRoomWebRTCOptions) {
           });
         },
         onTrack: (remoteStream) => {
+          console.log('[useRoomWebRTC] 收到远程流:', targetUserId);
           const member = membersRef.current.find((m) => m.id === targetUserId);
           addStream({
             userId: targetUserId,
@@ -63,8 +72,11 @@ export function useRoomWebRTC({ roomId }: UseRoomWebRTCOptions) {
         },
       });
 
+      console.log('[useRoomWebRTC] PeerConnection 已创建，添加本地流...');
       peerManager.addStream(targetUserId, stream);
+      console.log('[useRoomWebRTC] 本地流已添加，创建 Offer...');
       const offer = await peerManager.createOffer(targetUserId);
+      console.log('[useRoomWebRTC] Offer 已创建，发送中...');
 
       await socketService.sendOffer({
         roomId,
