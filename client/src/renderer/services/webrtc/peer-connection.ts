@@ -6,6 +6,8 @@ export type PeerConnectionEventHandler = {
   onTrack?: (stream: MediaStream) => void;
   onConnectionStateChange?: (state: RTCPeerConnectionState) => void;
   onIceConnectionStateChange?: (state: RTCIceConnectionState) => void;
+  /** ICE 重启时的回调，需要将新的 Offer 发送给对方 */
+  onIceRestart?: (offer: RTCSessionDescriptionInit) => void;
 };
 
 /**
@@ -68,9 +70,6 @@ export class PeerConnectionManager {
         const candidateType = event.candidate.type;
         
         // 根据候选类型使用不同颜色
-        // relay = TURN 中继（红色，最重要）
-        // srflx = STUN 反射（黄色）
-        // host = 本地（绿色）
         let color = 'color: green; font-weight: bold;';
         let label = '本地';
         if (candidateType === 'relay') {
@@ -172,10 +171,11 @@ export class PeerConnectionManager {
         handlers.onConnectionStateChange(pc.connectionState);
       }
 
-      // 连接失败或关闭时清理
-      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+      // 只在连接关闭时清理，失败时让 ICE 重启机制处理
+      if (pc.connectionState === 'closed') {
         this.closeConnection(remoteUserId);
       }
+      // 注意：不再在 failed 时立即关闭，让 handleIceFailure 有机会尝试 ICE 重启
     };
 
     this.peerConnections.set(remoteUserId, pc);
@@ -191,29 +191,37 @@ export class PeerConnectionManager {
     if (!connState) return;
 
     if (connState.retryCount >= this.MAX_RETRY_COUNT) {
+      console.error(`[ICE] ✗ 重试次数已达上限 [${remoteUserId}]，放弃连接`);
       logger.error(`ICE重试次数已达上限 [${remoteUserId}]，放弃重试`);
+      // 最终放弃时才关闭连接
+      this.closeConnection(remoteUserId);
       return;
     }
 
     connState.retryCount++;
+    console.log(`%c[ICE] 🔄 ICE重启 第${connState.retryCount}/${this.MAX_RETRY_COUNT}次 [${remoteUserId}]`,
+      'color: purple; font-weight: bold;');
     logger.warn(`ICE连接失败 [${remoteUserId}]，准备第 ${connState.retryCount} 次重试...`);
 
     // 延迟后执行 ICE 重启
     connState.iceRestartTimer = setTimeout(async () => {
       try {
         // ICE 重启：创建新的 offer 并设置 iceRestart: true
+        console.log(`[ICE] 创建 ICE 重启 Offer...`);
         const offer = await pc.createOffer({ iceRestart: true });
         await pc.setLocalDescription(offer);
         
+        console.log(`[ICE] ICE 重启 Offer 已创建，发送给对方...`);
         logger.info(`ICE重启已发起 [${remoteUserId}]`);
         
-        // 通过 handler 发送新的 offer
-        // 注意：这需要在 useRoomWebRTC 中处理
-        if (connState.handlers.onIceCandidate) {
-          // ICE 重启会触发新的 ICE 候选收集
-          logger.info(`等待新的ICE候选 [${remoteUserId}]`);
+        // 通过 onIceRestart 回调发送新的 offer 给对方
+        if (connState.handlers.onIceRestart) {
+          connState.handlers.onIceRestart(offer);
+        } else {
+          console.warn('[ICE] onIceRestart 回调未设置，无法发送重启 Offer');
         }
       } catch (error) {
+        console.error(`[ICE] ICE重启失败:`, error);
         logger.error(`ICE重启失败 [${remoteUserId}]:`, error);
       }
     }, this.ICE_RESTART_DELAY);

@@ -271,7 +271,24 @@ export class WebRTCHandler {
     data: ClientEventParams[ClientEvents.SEND_ICE_CANDIDATE],
     callback?: (response: any) => void
   ): Promise<void> {
-    this.logger.debug('转发ICE候选', { socketId: socket.id });
+    // 提取候选类型用于日志
+    const candidateStr = data.candidate?.candidate || '';
+    let candidateType = 'unknown';
+    if (candidateStr.includes(' host ')) {
+      candidateType = 'host';
+    } else if (candidateStr.includes(' srflx ')) {
+      candidateType = 'srflx';
+    } else if (candidateStr.includes(' relay ')) {
+      candidateType = 'relay';
+    } else if (candidateStr.includes(' prflx ')) {
+      candidateType = 'prflx';
+    }
+    
+    this.logger.info('转发ICE候选', {
+      socketId: socket.id,
+      targetUserId: data.targetUserId,
+      candidateType,
+    });
 
     const fromUser = this.roomService.getUserBySocketId(socket.id);
     if (!fromUser) {

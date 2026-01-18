@@ -70,6 +70,20 @@ export function useRoomWebRTC({ roomId }: UseRoomWebRTCOptions) {
             isLocal: false,
           });
         },
+        // ICE 重启回调 - 发送新的 Offer 给对方
+        onIceRestart: async (offer) => {
+          console.log('[useRoomWebRTC] ICE重启，发送新Offer to:', targetUserId);
+          await socketService.sendOffer({
+            roomId,
+            from: userId,
+            to: targetUserId,
+            targetUserId,
+            offer: {
+              type: offer.type as 'offer' | 'answer',
+              sdp: offer.sdp!,
+            },
+          });
+        },
       });
 
       console.log('[useRoomWebRTC] PeerConnection 已创建，添加本地流...');
@@ -126,6 +140,10 @@ export function useRoomWebRTC({ roomId }: UseRoomWebRTCOptions) {
 
       peerManager.createConnection(data.fromUserId, {
         onIceCandidate: (candidate) => {
+          console.log('[useRoomWebRTC] 本地ICE候选生成(Answer端)，发送:', {
+            to: data.fromUserId,
+            type: candidate.type,
+          });
           socketService.sendIceCandidate({
             roomId,
             from: userId,
@@ -142,6 +160,20 @@ export function useRoomWebRTC({ roomId }: UseRoomWebRTCOptions) {
             stream: remoteStream,
             nickname: member?.nickname || 'Unknown',
             isLocal: false,
+          });
+        },
+        // Answer 端一般不主动发起 ICE 重启，但留着以防万一
+        onIceRestart: async (offer) => {
+          console.log('[useRoomWebRTC] ICE重启(Answer端)，发送新Offer to:', data.fromUserId);
+          await socketService.sendOffer({
+            roomId,
+            from: userId,
+            to: data.fromUserId,
+            targetUserId: data.fromUserId,
+            offer: {
+              type: offer.type as 'offer' | 'answer',
+              sdp: offer.sdp!,
+            },
           });
         },
       });
