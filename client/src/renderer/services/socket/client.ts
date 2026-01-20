@@ -144,6 +144,18 @@ export class SocketService {
 
     console.log('[Socket] 设置事件监听器');
 
+    // 先移除所有旧的监听器，避免重复注册（React StrictMode 会导致重复执行）
+    this.socket.removeAllListeners(SocketEvents.ROOM_CREATED);
+    this.socket.removeAllListeners(SocketEvents.ROOM_JOINED);
+    this.socket.removeAllListeners(SocketEvents.USER_JOINED);
+    this.socket.removeAllListeners(SocketEvents.USER_LEFT);
+    this.socket.removeAllListeners(SocketEvents.USER_START_SHARING);
+    this.socket.removeAllListeners(SocketEvents.USER_STOP_SHARING);
+    this.socket.removeAllListeners(SocketEvents.WEBRTC_OFFER);
+    this.socket.removeAllListeners(SocketEvents.WEBRTC_ANSWER);
+    this.socket.removeAllListeners(SocketEvents.WEBRTC_ICE_CANDIDATE);
+    this.socket.removeAllListeners(SocketEvents.ERROR);
+
     // 房间事件
     this.socket.on(SocketEvents.ROOM_CREATED, (data: RoomCreatedPayload) => {
       logger.info('房间已创建:', data);
