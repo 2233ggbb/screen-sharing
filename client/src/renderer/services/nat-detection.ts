@@ -4,8 +4,9 @@
  */
 
 import { Modal } from 'antd';
-import { ServerEvents, ClientEvents } from '@screen-sharing/shared';
-import { Logger } from '../utils/logger';
+import { ServerEvents, ClientEvents } from '@shared/events';
+import { logger } from '../utils/logger';
+import React from 'react';
 
 export interface NATDetectionResult {
   type: 'full-cone' | 'restricted-cone' | 'port-restricted-cone' | 'symmetric';
@@ -17,10 +18,8 @@ export interface NATDetectionResult {
 }
 
 export class NATDetectionClient {
-  private logger: Logger;
-
   constructor() {
-    this.logger = new Logger('NATDetection');
+    // 使用全局 logger 实例
   }
 
   /**
@@ -28,11 +27,11 @@ export class NATDetectionClient {
    * @param socket Socket.io 客户端实例
    */
   async detectNATType(socket: any): Promise<NATDetectionResult> {
-    this.logger.info('开始检测 NAT 类型...');
+    logger.info('开始检测 NAT 类型...');
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        this.logger.error('NAT 检测超时');
+        logger.error('NAT 检测超时');
         reject(new Error('NAT 检测超时，请检查网络连接'));
       }, 10000); // 10 秒超时
 
@@ -41,7 +40,7 @@ export class NATDetectionClient {
         ServerEvents.NAT_TYPE_DETECTED,
         (result: NATDetectionResult) => {
           clearTimeout(timeout);
-          this.logger.info('NAT 检测完成', {
+          logger.info('NAT 检测完成', {
             type: result.type,
             canP2P: result.canP2P,
             confidence: result.confidence,
@@ -59,7 +58,7 @@ export class NATDetectionClient {
         clientId: this.getClientId(),
       });
 
-      this.logger.debug('已发送 NAT 检测请求');
+      logger.debug('已发送 NAT 检测请求');
     });
   }
 
@@ -68,86 +67,71 @@ export class NATDetectionClient {
    */
   private showDetectionResult(result: NATDetectionResult): void {
     const { type, canP2P, confidence, recommendation } = result;
+    const natTypeName = this.getNATTypeName(type);
 
     if (!canP2P) {
       // 无法 P2P - 显示错误提示
+      const lines = [
+        `NAT 类型: ${natTypeName}`,
+        '',
+        `检测结果: ${recommendation}`,
+        '',
+        '您的网络环境无法建立 P2P 连接。',
+        '',
+        '解决方法:',
+        '• 切换到手机热点或家庭宽带',
+        '• 避免使用公司/学校网络',
+        '• 联系管理员部署 TURN 中继服务器'
+      ];
+
       Modal.error({
         title: '⚠️ 网络环境不兼容',
-        content: (
-          <div>
-            <p>
-              <strong>NAT 类型：</strong>
-              {this.getNATTypeName(type)}
-            </p>
-            <p>
-              <strong>检测结果：</strong>
-              <span style={{ color: '#ff4d4f' }}>{recommendation}</span>
-            </p>
-            <p style={{ marginTop: 16 }}>
-              您的网络环境无法建立 P2P 连接。
-              <br />
-              <br />
-              <strong>解决方法：</strong>
-              <br />
-              • 切换到手机热点或家庭宽带
-              <br />
-              • 避免使用公司/学校网络
-              <br />
-              • 联系管理员部署 TURN 中继服务器
-              <br />
-            </p>
-          </div>
+        content: React.createElement('div', null,
+          lines.map((line, i) => React.createElement('div', { key: i }, line || '\u00A0'))
         ),
         okText: '我知道了',
         width: 500,
       });
     } else if (confidence < 70) {
       // 成功率较低 - 显示警告
+      const lines = [
+        `NAT 类型: ${natTypeName}`,
+        '',
+        `预计成功率: ${confidence}%`,
+        '',
+        recommendation,
+        '',
+        '系统将自动优化连接策略，但仍可能出现连接失败。',
+        '如果连接失败，建议切换网络环境。'
+      ];
+
       Modal.warning({
         title: '⚠️ 网络环境提示',
-        content: (
-          <div>
-            <p>
-              <strong>NAT 类型：</strong>
-              {this.getNATTypeName(type)}
-            </p>
-            <p>
-              <strong>预计成功率：</strong>
-              <span style={{ color: '#faad14' }}>{confidence}%</span>
-            </p>
-            <p style={{ marginTop: 8 }}>{recommendation}</p>
-            <p style={{ marginTop: 16, color: '#8c8c8c' }}>
-              系统将自动优化连接策略，但仍可能出现连接失败。
-              <br />
-              如果连接失败，建议切换网络环境。
-            </p>
-          </div>
+        content: React.createElement('div', null,
+          lines.map((line, i) => React.createElement('div', { key: i }, line || '\u00A0'))
         ),
         okText: '继续加入',
         width: 500,
       });
     } else {
       // 成功率高 - 仅日志记录
-      this.logger.info('✅ NAT 检测通过', {
+      logger.info('✅ NAT 检测通过', {
         type,
         confidence: `${confidence}%`,
         recommendation,
       });
 
       // 显示简短的成功提示
+      const lines = [
+        `NAT 类型: ${natTypeName}`,
+        '',
+        `预计成功率: ${confidence}%`
+      ];
+
       Modal.success({
         title: '✅ 网络环境检测通过',
-        content: (
-          <div>
-            <p>
-              <strong>NAT 类型：</strong>
-              {this.getNATTypeName(type)}
-            </p>
-            <p>
-              <strong>预计成功率：</strong>
-              <span style={{ color: '#52c41a' }}>{confidence}%</span>
-            </p>
-          </div>
+        content: React.createElement('div', null,
+          lines.map((line, i) => React.createElement('div', { key: i }, line || '\u00A0'))
         ),
         okText: '继续',
         width: 400,
@@ -181,7 +165,7 @@ export class NATDetectionClient {
    * 静默检测（不显示 UI）
    */
   async detectNATTypeSilent(socket: any): Promise<NATDetectionResult> {
-    this.logger.info('开始静默检测 NAT 类型...');
+    logger.info('开始静默检测 NAT 类型...');
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -192,7 +176,7 @@ export class NATDetectionClient {
         ServerEvents.NAT_TYPE_DETECTED,
         (result: NATDetectionResult) => {
           clearTimeout(timeout);
-          this.logger.info('静默检测完成', { type: result.type });
+          logger.info('静默检测完成', { type: result.type });
           resolve(result);
         }
       );
