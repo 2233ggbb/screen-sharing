@@ -28,7 +28,11 @@ export declare enum ClientEvents {
     /** 请求房间列表 */
     GET_ROOMS = "get_rooms",
     /** 请求房间信息 */
-    GET_ROOM_INFO = "get_room_info"
+    GET_ROOM_INFO = "get_room_info",
+    /** NAT 类型检测 */
+    DETECT_NAT_TYPE = "detect_nat_type",
+    /** ICE 收集完成通知 */
+    ICE_GATHERING_COMPLETE = "ice_gathering_complete"
 }
 /**
  * 客户端事件参数类型映射
@@ -65,6 +69,13 @@ export interface ClientEventParams {
     [ClientEvents.GET_ROOM_INFO]: {
         roomId: string;
     };
+    [ClientEvents.DETECT_NAT_TYPE]: {
+        clientId?: string;
+    };
+    [ClientEvents.ICE_GATHERING_COMPLETE]: {
+        targetUserId: string;
+        connectionId: string;
+    };
 }
 /**
  * 服务端发送的事件类型
@@ -99,7 +110,9 @@ export declare enum ServerEvents {
     /** 连接成功 */
     CONNECTED = "connected",
     /** 断开连接 */
-    DISCONNECTED = "disconnected"
+    DISCONNECTED = "disconnected",
+    /** NAT 类型检测结果 */
+    NAT_TYPE_DETECTED = "nat_type_detected"
 }
 /**
  * 服务端事件参数类型映射
@@ -165,6 +178,54 @@ export interface ServerEventParams {
     [ServerEvents.DISCONNECTED]: {
         reason: string;
     };
+    [ServerEvents.NAT_TYPE_DETECTED]: {
+        type: 'full-cone' | 'restricted-cone' | 'port-restricted-cone' | 'symmetric';
+        canP2P: boolean;
+        confidence: number;
+        publicAddress: {
+            ip: string;
+            port: number;
+        };
+        recommendation: string;
+        requiresSync: boolean;
+    };
+}
+/**
+ * Socket.io 事件枚举（统一客户端和服务端事件）
+ * 用于方便在客户端代码中引用
+ */
+export declare enum SocketEvents {
+    CREATE_ROOM = "create_room",
+    JOIN_ROOM = "join_room",
+    LEAVE_ROOM = "leave_room",
+    START_SHARING = "start_sharing",
+    STOP_SHARING = "stop_sharing",
+    SEND_OFFER = "send_offer",
+    SEND_ANSWER = "send_answer",
+    SEND_ICE_CANDIDATE = "send_ice_candidate",
+    UPDATE_QUALITY = "update_quality",
+    GET_ROOMS = "get_rooms",
+    GET_ROOM_INFO = "get_room_info",
+    ROOM_CREATED = "room_created",
+    ROOM_JOINED = "room_joined",
+    USER_JOINED = "user_joined",
+    USER_LEFT = "user_left",
+    USER_STARTED_SHARING = "user_started_sharing",
+    USER_STOPPED_SHARING = "user_stopped_sharing",
+    RECEIVE_OFFER = "receive_offer",
+    RECEIVE_ANSWER = "receive_answer",
+    RECEIVE_ICE_CANDIDATE = "receive_ice_candidate",
+    QUALITY_UPDATED = "quality_updated",
+    ROOMS_LIST = "rooms_list",
+    ROOM_INFO = "room_info",
+    ERROR = "error",
+    CONNECTED = "connected",
+    DISCONNECTED = "disconnected",
+    WEBRTC_OFFER = "receive_offer",
+    WEBRTC_ANSWER = "receive_answer",
+    WEBRTC_ICE_CANDIDATE = "receive_ice_candidate",
+    USER_START_SHARING = "user_started_sharing",
+    USER_STOP_SHARING = "user_stopped_sharing"
 }
 /**
  * 事件处理器类型

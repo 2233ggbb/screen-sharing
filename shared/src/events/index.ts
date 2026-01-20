@@ -47,6 +47,11 @@ export enum ClientEvents {
   GET_ROOMS = 'get_rooms',
   /** 请求房间信息 */
   GET_ROOM_INFO = 'get_room_info',
+
+  /** NAT 类型检测 */
+  DETECT_NAT_TYPE = 'detect_nat_type',
+  /** ICE 收集完成通知 */
+  ICE_GATHERING_COMPLETE = 'ice_gathering_complete',
 }
 
 /**
@@ -86,6 +91,14 @@ export interface ClientEventParams {
   
   [ClientEvents.GET_ROOMS]: undefined;
   [ClientEvents.GET_ROOM_INFO]: { roomId: string };
+
+  [ClientEvents.DETECT_NAT_TYPE]: {
+    clientId?: string;
+  };
+  [ClientEvents.ICE_GATHERING_COMPLETE]: {
+    targetUserId: string;
+    connectionId: string;
+  };
 }
 
 // ==================== 服务端发送事件 ====================
@@ -130,6 +143,9 @@ export enum ServerEvents {
   CONNECTED = 'connected',
   /** 断开连接 */
   DISCONNECTED = 'disconnected',
+
+  /** NAT 类型检测结果 */
+  NAT_TYPE_DETECTED = 'nat_type_detected',
 }
 
 /**
@@ -201,6 +217,15 @@ export interface ServerEventParams {
   };
   [ServerEvents.DISCONNECTED]: {
     reason: string;
+  };
+
+  [ServerEvents.NAT_TYPE_DETECTED]: {
+    type: 'full-cone' | 'restricted-cone' | 'port-restricted-cone' | 'symmetric';
+    canP2P: boolean;
+    confidence: number;
+    publicAddress: { ip: string; port: number };
+    recommendation: string;
+    requiresSync: boolean;
   };
 }
 

@@ -23,8 +23,9 @@ interface RTCConfig {
   iceTransportPolicy?: 'all' | 'relay';
 }
 
-// WebRTC 配置
-// 注意：生产环境应使用自建的 TURN 服务器以确保稳定性
+// WebRTC 配置 - 纯 P2P 直连模式
+// 注意：本项目仅支持 P2P 直连，不提供 TURN 中继服务器
+// 如需在复杂 NAT 环境下使用，请自行部署 TURN 服务器
 export const RTC_CONFIG: RTCConfig = {
   iceServers: [
     // STUN 服务器 - 用于获取公网 IP
@@ -33,23 +34,9 @@ export const RTC_CONFIG: RTCConfig = {
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
-    // 公共 TURN 服务器 - 用于 NAT 穿透失败时的中继
-    // 使用 OpenRelay 公共 TURN 服务器（免费，适合测试）
-    {
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    { urls: 'stun:stun.syncthing.net:3478' },
+    { urls: 'stun:global.stun.twilio.com:3478' },
   ],
   iceCandidatePoolSize: 10,
   iceTransportPolicy: 'all',

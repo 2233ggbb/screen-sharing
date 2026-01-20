@@ -4,7 +4,7 @@
  * 定义客户端和服务端之间的所有Socket.io事件
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ServerEvents = exports.ClientEvents = void 0;
+exports.SocketEvents = exports.ServerEvents = exports.ClientEvents = void 0;
 // ==================== 客户端发送事件 ====================
 /**
  * 客户端发送的事件类型
@@ -33,6 +33,10 @@ var ClientEvents;
     ClientEvents["GET_ROOMS"] = "get_rooms";
     /** 请求房间信息 */
     ClientEvents["GET_ROOM_INFO"] = "get_room_info";
+    /** NAT 类型检测 */
+    ClientEvents["DETECT_NAT_TYPE"] = "detect_nat_type";
+    /** ICE 收集完成通知 */
+    ClientEvents["ICE_GATHERING_COMPLETE"] = "ice_gathering_complete";
 })(ClientEvents || (exports.ClientEvents = ClientEvents = {}));
 // ==================== 服务端发送事件 ====================
 /**
@@ -70,4 +74,49 @@ var ServerEvents;
     ServerEvents["CONNECTED"] = "connected";
     /** 断开连接 */
     ServerEvents["DISCONNECTED"] = "disconnected";
+    /** NAT 类型检测结果 */
+    ServerEvents["NAT_TYPE_DETECTED"] = "nat_type_detected";
 })(ServerEvents || (exports.ServerEvents = ServerEvents = {}));
+// ==================== 统一事件枚举 ====================
+/**
+ * Socket.io 事件枚举（统一客户端和服务端事件）
+ * 用于方便在客户端代码中引用
+ */
+var SocketEvents;
+(function (SocketEvents) {
+    // 客户端发送事件
+    SocketEvents["CREATE_ROOM"] = "create_room";
+    SocketEvents["JOIN_ROOM"] = "join_room";
+    SocketEvents["LEAVE_ROOM"] = "leave_room";
+    SocketEvents["START_SHARING"] = "start_sharing";
+    SocketEvents["STOP_SHARING"] = "stop_sharing";
+    SocketEvents["SEND_OFFER"] = "send_offer";
+    SocketEvents["SEND_ANSWER"] = "send_answer";
+    SocketEvents["SEND_ICE_CANDIDATE"] = "send_ice_candidate";
+    SocketEvents["UPDATE_QUALITY"] = "update_quality";
+    SocketEvents["GET_ROOMS"] = "get_rooms";
+    SocketEvents["GET_ROOM_INFO"] = "get_room_info";
+    // 服务端发送事件
+    SocketEvents["ROOM_CREATED"] = "room_created";
+    SocketEvents["ROOM_JOINED"] = "room_joined";
+    SocketEvents["USER_JOINED"] = "user_joined";
+    SocketEvents["USER_LEFT"] = "user_left";
+    SocketEvents["USER_STARTED_SHARING"] = "user_started_sharing";
+    SocketEvents["USER_STOPPED_SHARING"] = "user_stopped_sharing";
+    SocketEvents["RECEIVE_OFFER"] = "receive_offer";
+    SocketEvents["RECEIVE_ANSWER"] = "receive_answer";
+    SocketEvents["RECEIVE_ICE_CANDIDATE"] = "receive_ice_candidate";
+    SocketEvents["QUALITY_UPDATED"] = "quality_updated";
+    SocketEvents["ROOMS_LIST"] = "rooms_list";
+    SocketEvents["ROOM_INFO"] = "room_info";
+    SocketEvents["ERROR"] = "error";
+    SocketEvents["CONNECTED"] = "connected";
+    SocketEvents["DISCONNECTED"] = "disconnected";
+    // WebRTC 信令事件（客户端使用的别名）
+    SocketEvents["WEBRTC_OFFER"] = "receive_offer";
+    SocketEvents["WEBRTC_ANSWER"] = "receive_answer";
+    SocketEvents["WEBRTC_ICE_CANDIDATE"] = "receive_ice_candidate";
+    // 用户共享事件（客户端使用的别名）
+    SocketEvents["USER_START_SHARING"] = "user_started_sharing";
+    SocketEvents["USER_STOP_SHARING"] = "user_stopped_sharing";
+})(SocketEvents || (exports.SocketEvents = SocketEvents = {}));

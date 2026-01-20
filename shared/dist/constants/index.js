@@ -71,17 +71,22 @@ exports.SHARE_CONSTANTS = {
 };
 // ==================== WebRTC相关常量 ====================
 /**
- * WebRTC配置常量
+ * WebRTC配置常量 - 纯 P2P 直连模式
+ * 注意：本项目仅支持 P2P 直连，不提供 TURN 中继服务器
+ * 如需在复杂 NAT 环境下使用，请自行部署 TURN 服务器
  */
 exports.WEBRTC_CONSTANTS = {
     /** ICE服务器配置 */
     ICE_SERVERS: [
-        {
-            urls: 'stun:stun.l.google.com:19302',
-        },
-        {
-            urls: 'stun:stun1.l.google.com:19302',
-        },
+        // STUN 服务器 - 用于获取公网 IP 和端口映射
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
+        { urls: 'stun:stun.cloudflare.com:3478' },
+        { urls: 'stun:stun.syncthing.net:3478' },
+        { urls: 'stun:global.stun.twilio.com:3478' },
     ],
     /** 连接超时时间 (ms) */
     CONNECTION_TIMEOUT: 30000,

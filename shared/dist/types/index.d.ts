@@ -218,4 +218,79 @@ export interface FailureResponse {
  * API响应类型
  */
 export type ApiResponse<T = any> = SuccessResponse<T> | FailureResponse;
+/**
+ * 创建房间 Payload
+ */
+export interface CreateRoomPayload {
+    roomName: string;
+    nickname: string;
+    password?: string;
+    maxMembers?: number;
+}
+/**
+ * 加入房间 Payload
+ */
+export interface JoinRoomPayload {
+    roomId: string;
+    nickname: string;
+    password?: string;
+}
+/**
+ * 离开房间 Payload
+ */
+export interface LeaveRoomPayload {
+    roomId: string;
+}
+/**
+ * 房间创建成功 Payload
+ */
+export interface RoomCreatedPayload {
+    room: Room;
+    userId: string;
+}
+/**
+ * 加入房间成功 Payload
+ */
+export interface RoomJoinedPayload {
+    room: Room;
+    userId: string;
+}
+/**
+ * 用户加入房间 Payload
+ */
+export interface UserJoinedPayload {
+    user: User;
+    roomId: string;
+}
+/**
+ * 用户离开房间 Payload
+ */
+export interface UserLeftPayload {
+    userId: string;
+    roomId: string;
+}
+/**
+ * 用户开始共享 Payload
+ */
+export interface UserStartSharingPayload {
+    userId: string;
+    streamInfo: StreamInfo;
+}
+/**
+ * 用户停止共享 Payload
+ */
+export interface UserStopSharingPayload {
+    userId: string;
+    streamId: string;
+}
+/**
+ * WebRTC 信令 Payload
+ */
+export interface WebRTCSignalPayload {
+    from: string;
+    to: string;
+    roomId: string;
+    sdp?: RTCSessionDescriptionData;
+    candidate?: IceCandidate;
+}
 //# sourceMappingURL=index.d.ts.map

@@ -2,20 +2,32 @@
 
 ## 项目简介
 
-多人屏幕共享系统是一款基于 Electron + WebRTC + Node.js 开发的跨平台桌面应用，专为小型团队（5-10人）设计，支持多人同时分享屏幕、多人实时观看，适用于远程会议、团队协作、技术演示等场景。
+多人屏幕共享系统是一款基于 Electron + WebRTC + Node.js 开发的跨平台屏幕共享解决方案，包含桌面端和移动端应用。专为小型团队（5-10人）设计，支持多人同时分享屏幕、多人实时观看，适用于远程会议、团队协作、技术演示等场景。
 
 ## 核心特性
 
-- ✅ **跨平台支持**：Windows、macOS、Linux 三大平台
+- ✅ **全平台支持**：支持 Windows、macOS、Linux 桌面端及 Android 移动端
 - ✅ **多人共享**：支持多人同时分享屏幕
 - ✅ **灵活选择**：可选择共享整个屏幕或特定窗口
-- ✅ **低延迟**：基于 WebRTC P2P 技术，延迟 < 500ms
+- ✅ **低延迟**：基于 WebRTC P2P 直连技术，延迟 < 500ms
 - ✅ **易用性**：简单直观的操作流程，快速上手
 - ✅ **房间管理**：创建/加入房间，支持密码保护
 
+## 使用限制
+
+⚠️ **网络环境要求**：本系统采用纯 P2P 直连模式，对网络环境有一定要求：
+
+- ✅ **完全锥型 NAT** (Full Cone NAT) - 完全支持
+- ✅ **受限锥型 NAT** (Restricted Cone NAT) - 完全支持
+- ⚠️ **端口受限锥型 NAT** (Port Restricted Cone NAT) - 可能连接失败
+- ❌ **对称型 NAT** (Symmetric NAT) - 无法直连
+- ❌ **公司/学校防火墙** - 可能被阻止
+
+**注意**：本项目不提供 TURN 中继服务器。如需在复杂 NAT 环境或企业网络中使用，建议自行部署 TURN 服务器。详见 [部署运维文档](docs/部署运维文档.md)。
+
 ## 技术栈
 
-### 客户端
+### 桌面客户端
 - **Electron 28+**: 跨平台桌面应用框架
 - **React 18+**: UI 框架
 - **TypeScript 5+**: 类型安全
@@ -26,6 +38,14 @@
 - **Less + CSS Modules**: 样式方案
 - **ESLint + Prettier**: 代码规范
 - **Jest + Testing Library**: 测试框架
+
+### 移动客户端 (Mobile)
+- **React Native 0.76+**: 跨平台移动应用框架
+- **TypeScript 5+**: 类型安全
+- **React Native Paper 5+**: UI 组件库
+- **react-native-webrtc**: WebRTC 实现
+- **Socket.io Client**: WebSocket 通信
+- **Zustand**: 状态管理
 
 ### 服务端
 - **Node.js 20+**: 运行时
@@ -40,7 +60,8 @@
 
 ```
 screen-sharing/
-├── client/                 # 客户端（Electron应用）
+├── client/                 # 桌面客户端（Electron应用）
+├── mobile/                 # 移动客户端（React Native应用）
 ├── server/                 # 服务端（Node.js信令服务器）
 ├── shared/                 # 共享代码（类型定义、常量等）
 ├── docs/                   # 项目文档
@@ -82,6 +103,9 @@ cd server && npm install && cd ..
 
 # 安装客户端依赖
 cd client && npm install && cd ..
+
+# 安装移动端依赖
+cd mobile && npm install && cd ..
 ```
 
 ### 启动开发环境
@@ -92,10 +116,20 @@ cd server
 npm run dev
 ```
 
-**启动客户端**:
+**启动桌面客户端**:
 ```bash
 cd client
 npm run dev
+```
+
+**启动移动端**:
+```bash
+cd mobile
+# 启动 Metro bundler
+npm start
+
+# 运行 Android (需连接设备或模拟器)
+npm run android
 ```
 
 ### 构建生产版本
@@ -112,6 +146,12 @@ cd client
 npm run build:prod
 ```
 
+**打包移动端 (Android)**:
+```bash
+cd mobile
+npm run build:android
+```
+
 ## 文档导航
 
 ### 🌟 快速入口
@@ -124,6 +164,9 @@ npm run build:prod
 - [技术架构设计](docs/技术架构设计.md) - 深入了解系统架构和技术选型
 - [API接口文档](docs/API文档.md) - 查看所有 WebSocket 和 HTTP 接口定义
 - [WebRTC多人共享架构说明](docs/WebRTC多人共享架构说明.md) - P2P多人共享机制详解
+- [NAT穿透优化方案](docs/NAT穿透优化方案.md) - ⭐ 后端协助 P2P 连接方案（推荐）
+- [NAT穿透实施指南](docs/NAT穿透实施指南.md) - NAT 穿透优化的实施步骤
+- [NAT穿透解决方案](docs/NAT穿透解决方案.md) - 包含 TURN 中继的传统方案
 - [项目目录结构](plans/项目目录结构.md) - 详细的项目文件组织说明
 
 ### 🚀 开发文档
@@ -131,7 +174,12 @@ npm run build:prod
 - [Ant Design使用指南](docs/AntDesign使用指南.md) - UI组件库使用方法和最佳实践
 - [主题设计方案](docs/主题设计方案.md) - 天蓝色和淡粉色两套完整主题设计
 - [配置文件示例](docs/配置文件示例.md) - ESLint、Prettier、TypeScript等配置示例
+
+### 🔧 部署文档
 - [部署运维文档](docs/部署运维文档.md) - 生产环境部署和运维管理
+- [Render部署指南](docs/Render部署指南.md) - Render.com 平台部署指南
+- [Railway部署指南](docs/Railway部署指南.md) - Railway.app 平台部署指南
+- [本地部署指南](docs/本地部署指南.md) - 本地开发和测试部署
 
 ## 核心功能
 
@@ -157,15 +205,18 @@ npm run build:prod
 
 ```
 客户端A ←──────────────────────→ 客户端B
-   │        WebRTC P2P连接          │
+   │        WebRTC P2P 直连         │
    │                                │
    │ Socket.io (信令)               │
    ├────────────┐          ┌────────┤
                 │          │
             信令服务器 (Node.js)
-                │
-         TURN服务器 (可选中继)
 ```
+
+**架构说明**：
+- 媒体流通过 **WebRTC P2P 直连**，不经过服务器，延迟低、带宽成本低
+- 信令服务器仅用于**房间管理和 SDP/ICE 交换**，不转发媒体流
+- 服务器压力小，可支持 5-10 人小团队同时使用
 
 ## 开发规范
 

@@ -30,6 +30,14 @@ export function useRoomWebRTC({ roomId }: UseRoomWebRTCOptions) {
   const membersRef = useRef(useRoomStore.getState().members);
 
   useEffect(() => {
+    // 设置本地用户 ID 到 peerManager
+    if (userId) {
+      peerManager.setLocalUserId(userId);
+      console.log('[useRoomWebRTC] 设置本地用户 ID:', userId);
+    }
+  }, [userId, peerManager]);
+
+  useEffect(() => {
     // 订阅 store 变化，保持 ref 最新
     const unsubscribe = useRoomStore.subscribe((state) => {
       membersRef.current = state.members;
@@ -83,6 +91,14 @@ export function useRoomWebRTC({ roomId }: UseRoomWebRTCOptions) {
               sdp: offer.sdp!,
             },
           });
+        },
+        // ICE 收集完成回调 - 通知服务器进行协调
+        onIceGatheringComplete: (target, connectionId) => {
+          console.log('[useRoomWebRTC] ICE 收集完成，通知服务器协调:', {
+            target,
+            connectionId,
+          });
+          socketService.notifyIceGatheringComplete(target, connectionId);
         },
       });
 
@@ -175,6 +191,14 @@ export function useRoomWebRTC({ roomId }: UseRoomWebRTCOptions) {
               sdp: offer.sdp!,
             },
           });
+        },
+        // ICE 收集完成回调 - Answer 端也需要通知
+        onIceGatheringComplete: (target, connectionId) => {
+          console.log('[useRoomWebRTC] ICE 收集完成(Answer端)，通知服务器:', {
+            target,
+            connectionId,
+          });
+          socketService.notifyIceGatheringComplete(target, connectionId);
         },
       });
 

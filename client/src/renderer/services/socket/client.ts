@@ -330,7 +330,7 @@ export class SocketService {
     const candidateStr = payload.candidate?.candidate || '';
     const parts = candidateStr.split(' ');
     const candidateType = parts[7] || 'unknown';
-    
+
     console.log('[Socket] 发送: SEND_ICE_CANDIDATE', {
       to: payload.targetUserId,
       type: candidateType,
@@ -339,6 +339,27 @@ export class SocketService {
       port: parts[5],
     });
     return this.emit(SocketEvents.SEND_ICE_CANDIDATE, payload);
+  }
+
+  /**
+   * 通知 ICE 收集完成（用于连接协调）
+   */
+  notifyIceGatheringComplete(targetUserId: string, connectionId: string): Promise<void> {
+    console.log('[Socket] 发送: ICE_GATHERING_COMPLETE', {
+      targetUserId,
+      connectionId,
+    });
+    return this.emit('ice_gathering_complete', {
+      targetUserId,
+      connectionId,
+    });
+  }
+
+  /**
+   * 获取 Socket 实例（用于 NAT 检测）
+   */
+  getSocket(): Socket | null {
+    return this.socket;
   }
 
   /**

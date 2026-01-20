@@ -10,6 +10,7 @@ import {
 import { useUserStore } from '../../store/user';
 import { useRoomStore } from '../../store/room';
 import { socketService } from '../../services/socket/client';
+import { natDetector } from '../../services/nat-detection';
 import { STORAGE_KEYS } from '../../utils/constants';
 import './index.less';
 
@@ -94,12 +95,29 @@ const Home: React.FC = () => {
       // 连接Socket服务器
       await socketService.connect();
 
-      // 监听房间加入成功事件
+      // ✅ 步骤 1: 先检测 NAT 类型
+      console.log('[Home] 开始 NAT 检测...');
+      const socket = socketService.getSocket();
+      if (!socket) {
+        throw new Error('Socket 未连接');
+      }
+
+      const natResult = await natDetector.detectNATType(socket);
+      console.log('[Home] NAT 检测完成:', natResult);
+
+      // 如果无法 P2P，不继续加入
+      if (!natResult.canP2P) {
+        message.error('您的网络环境不支持 P2P 连接，无法加入房间');
+        setLoading(false);
+        return;
+      }
+
+      // ✅ 步骤 2: 监听房间加入成功事件
       socketService.setHandlers({
         onRoomJoined: (data) => {
           // 更新服务端返回的 userId
           setUserId(data.userId);
-          
+
           // 设置房间信息到 store
           setRoomInfo({
             id: data.room.id,
@@ -109,14 +127,14 @@ const Home: React.FC = () => {
             createdAt: data.room.createdAt,
             maxMembers: data.room.maxMembers,
           });
-          
+
           // 设置成员列表
-          const members = data.room.members.map(member => ({
+          const members = data.room.members.map((member) => ({
             ...member,
             isSharing: member.isSharing || false,
           }));
           setMembers(members);
-          
+
           message.success('加入房间成功');
           navigate(`/room/${data.room.id}`);
         },
@@ -126,12 +144,13 @@ const Home: React.FC = () => {
         },
       });
 
-      // 加入房间
+      // ✅ 步骤 3: 加入房间
       await socketService.joinRoom({
         roomId: values.roomId,
         nickname: nickname,
       });
     } catch (error: any) {
+      console.error('[Home] 加入房间失败:', error);
       message.error('加入房间失败: ' + error.message);
       setLoading(false);
     }

@@ -1,6 +1,6 @@
 {
   "name": "@screen-sharing/shared",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "共享类型定义和常量",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
