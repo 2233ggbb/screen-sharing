@@ -1,4 +1,4 @@
-import { RTC_CONFIG } from '../../utils/constants';
+import { RTC_CONFIG, STORAGE_KEYS } from '../../utils/constants';
 import { logger } from '../../utils/logger';
 
 export type PeerConnectionEventHandler = {
@@ -53,14 +53,18 @@ export class PeerConnectionManager {
   private peerConnections: Map<string, RTCPeerConnection> = new Map();
   private connectionStates: Map<string, ConnectionState> = new Map();
   private config: RTCConfiguration;
-  private readonly MAX_RETRY_COUNT = 3;
-  private readonly ICE_RESTART_DELAY = 2000; // 2秒后重试
+  // 激进重试策略：增加重试次数，缩短间隔，模拟"狂发包"模式
+  private readonly MAX_RETRY_COUNT = 10;
+  private readonly ICE_RESTART_DELAY = 1000; // 1秒后重试
   private localUserId: string = ''; // 本地用户 ID
+  private enableIPv6: boolean = true;
 
   constructor(config: RTCConfiguration = RTC_CONFIG) {
     this.config = config;
     // 从本地存储获取用户 ID
-    this.localUserId = localStorage.getItem('user_id') || '';
+    this.localUserId = localStorage.getItem(STORAGE_KEYS.USER_ID) || '';
+    // 获取 IPv6 配置
+    this.enableIPv6 = localStorage.getItem(STORAGE_KEYS.ENABLE_IPV6) !== 'false';
   }
 
   /**
@@ -127,7 +131,16 @@ export class PeerConnectionManager {
         }
 
         // 检测是否为 IPv6 候选
-        const isIPv6 = event.candidate.address?.includes(':');
+        // IPv6 地址包含多个冒号，IPv4 地址最多只有一个冒号（端口号）
+        const isIPv6 = event.candidate.address ?
+          (event.candidate.address.split(':').length > 2) : false;
+        
+        // IPv6 过滤逻辑
+        if (isIPv6 && !this.enableIPv6) {
+          console.warn('[ICE] 🚫 IPv6 已禁用：丢弃 IPv6 候选', event.candidate.address);
+          return;
+        }
+
         if (isIPv6) {
           console.log(`%c[ICE] ★ IPv6 候选 ★ ${label}`, 'color: purple; font-weight: bold;', {
             remoteUserId,
@@ -152,12 +165,13 @@ export class PeerConnectionManager {
           type: candidateType,
           address: event.candidate.address,
         });
-        
-        // TODO: 测试 NAT 穿透时取消注释以下代码块，过滤掉 host 候选
-        if (candidateType === 'host') {
-          console.warn('[ICE] 🚫 模拟非局域网环境：丢弃 host 候选', event.candidate.address);
-          return;
-        }
+
+        // ⚠️ 测试代码：用于模拟非局域网环境，过滤掉 host 候选
+        // 生产环境请注释掉此代码，否则局域网无法直连！
+        // if (candidateType === 'host') {
+        //   console.warn('[ICE] 🚫 模拟非局域网环境：丢弃 host 候选', event.candidate.address);
+        //   return;
+        // }
 
         if (handlers.onIceCandidate) {
           console.log('[ICE] 调用 onIceCandidate 回调发送候选...');

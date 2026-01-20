@@ -22,6 +22,9 @@
 export const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
     // === STUN 服务器 - 用于获取公网 IP 和端口映射 ===
+    // 国内 STUN 服务器（腾讯、小米），提高国内连接成功率
+    { urls: 'stun:stun.qq.com:3478' },
+    { urls: 'stun:stun.miwifi.com:3478' },
     // Google STUN 服务器（稳定可靠）
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
@@ -70,6 +73,7 @@ export const STORAGE_KEYS = {
   RECENT_ROOMS: 'recent_rooms',
   SERVER_URL: 'server_url',
   THEME: 'theme',
+  ENABLE_IPV6: 'enable_ipv6',
 } as const;
 
 // 网络质量阈值

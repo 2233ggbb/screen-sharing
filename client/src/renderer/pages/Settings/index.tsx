@@ -25,6 +25,7 @@ interface SettingsFormValues {
   defaultResolution: string;
   defaultFrameRate: number;
   hardwareAcceleration: boolean;
+  enableIPv6: boolean;
   theme: 'light' | 'dark';
 }
 
@@ -41,12 +42,14 @@ const Settings: React.FC = () => {
   const loadSettings = () => {
     const serverUrl = localStorage.getItem(STORAGE_KEYS.SERVER_URL) || DEFAULT_SERVER_URL;
     const theme = (localStorage.getItem(STORAGE_KEYS.THEME) || 'light') as 'light' | 'dark';
+    const enableIPv6 = localStorage.getItem(STORAGE_KEYS.ENABLE_IPV6) !== 'false'; // 默认为 true
 
     form.setFieldsValue({
       serverUrl,
       defaultResolution: '1080p',
       defaultFrameRate: 30,
       hardwareAcceleration: true,
+      enableIPv6,
       theme,
     });
   };
@@ -58,6 +61,7 @@ const Settings: React.FC = () => {
       // 保存到本地存储
       localStorage.setItem(STORAGE_KEYS.SERVER_URL, values.serverUrl);
       localStorage.setItem(STORAGE_KEYS.THEME, values.theme);
+      localStorage.setItem(STORAGE_KEYS.ENABLE_IPV6, String(values.enableIPv6));
 
       // 更新 socket 服务的服务器地址
       socketService.updateServerUrl(values.serverUrl);
@@ -80,6 +84,7 @@ const Settings: React.FC = () => {
       defaultResolution: '1080p',
       defaultFrameRate: 30,
       hardwareAcceleration: true,
+      enableIPv6: true,
       theme: 'light',
     });
     message.info('已恢复默认设置');
@@ -113,6 +118,15 @@ const Settings: React.FC = () => {
               rules={[{ required: true, message: '请输入服务器地址' }]}
             >
               <Input placeholder="http://localhost:3000" />
+            </Form.Item>
+
+            <Form.Item
+              label="启用 IPv6"
+              name="enableIPv6"
+              valuePropName="checked"
+              tooltip="如果双方网络都支持 IPv6，可以绕过 NAT 直接连接，大幅提高成功率"
+            >
+              <Switch />
             </Form.Item>
           </Card>
 
