@@ -4,7 +4,7 @@
  */
 
 import { Server as SocketIOServer } from 'socket.io';
-import { ServerEvents } from '@screen-sharing/shared';
+import { ServerEvents, IceCandidate } from '@screen-sharing/shared';
 import { Logger } from '../utils/logger';
 
 interface PendingConnection {
@@ -12,8 +12,8 @@ interface PendingConnection {
   userB: string;
   socketA: string; // Socket ID
   socketB: string;
-  candidatesA: RTCIceCandidate[];
-  candidatesB: RTCIceCandidate[];
+  candidatesA: IceCandidate[];
+  candidatesB: IceCandidate[];
   readyA: boolean;
   readyB: boolean;
   createdAt: number;
@@ -22,7 +22,7 @@ interface PendingConnection {
 export class ConnectionCoordinator {
   private logger: Logger;
   private pendingConnections = new Map<string, PendingConnection>();
-  private cleanupInterval: NodeJS.Timeout;
+  private cleanupInterval: NodeJS.Timeout | null = null;
 
   // 配置
   private readonly CONNECTION_TIMEOUT = 30000; // 30 秒
@@ -78,7 +78,7 @@ export class ConnectionCoordinator {
   addCandidate(
     fromUser: string,
     toUser: string,
-    candidate: RTCIceCandidate
+    candidate: IceCandidate
   ): { shouldForward: boolean } {
     const connectionId = this.getConnectionId(fromUser, toUser);
     const conn = this.pendingConnections.get(connectionId);
@@ -209,7 +209,7 @@ export class ConnectionCoordinator {
   private async sendAllCandidates(
     socket: any,
     fromUser: string,
-    candidates: RTCIceCandidate[]
+    candidates: IceCandidate[]
   ): Promise<void> {
     if (candidates.length === 0) {
       this.logger.warn(`没有候选需要发送给 ${socket.id}`);

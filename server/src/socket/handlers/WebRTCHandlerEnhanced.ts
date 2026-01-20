@@ -165,8 +165,8 @@ export class WebRTCHandlerEnhanced {
     }
 
     // 获取房间内其他成员
-    const roomMembers = this.roomService.getRoomMembers(user.roomId);
-    const otherUsers = roomMembers.filter((u) => u.id !== user.id);
+    const roomMembers = this.roomService.getRoomUsers(user.roomId);
+    const otherUsers = roomMembers.filter((u: any) => u.id !== user.id);
 
     // 检查是否需要为这些连接启用协调
     const userNAT = this.userNATInfo.get(user.id);
