@@ -12,7 +12,8 @@ import {
 } from 'react-native-webrtc';
 import { RTCSessionDescriptionData, IceCandidate } from '@screen-sharing/shared';
 import { logger } from '../../utils/logger';
-import { RTC_CONFIG, ICE_BATCH_CONFIG } from '../../utils/constants';
+import { RTC_CONFIG, ICE_BATCH_CONFIG, STORAGE_KEYS } from '../../utils/constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const webrtcLogger = logger.createNamespacedLogger('WebRTC');
 
@@ -34,6 +35,37 @@ export class WebRTCService {
   private localStream: MediaStream | null = null;
   private pendingIceCandidates: PendingIceCandidate[] = [];
   private iceBatchTimer: NodeJS.Timeout | null = null;
+  private enableIPv6: boolean = true;
+
+  constructor() {
+    // 从存储加载 IPv6 配置
+    this.loadIPv6Setting();
+  }
+
+  /**
+   * 加载 IPv6 设置
+   */
+  private async loadIPv6Setting(): Promise<void> {
+    try {
+      const value = await AsyncStorage.getItem(STORAGE_KEYS.ENABLE_IPV6);
+      this.enableIPv6 = value !== 'false'; // 默认为 true
+    } catch (error) {
+      webrtcLogger.error('加载 IPv6 设置失败:', error);
+      this.enableIPv6 = true;
+    }
+  }
+
+  /**
+   * 更新 IPv6 设置
+   */
+  async updateIPv6Setting(enabled: boolean): Promise<void> {
+    this.enableIPv6 = enabled;
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.ENABLE_IPV6, String(enabled));
+    } catch (error) {
+      webrtcLogger.error('保存 IPv6 设置失败:', error);
+    }
+  }
 
   /**
    * 创建 P2P 连接
@@ -53,8 +85,30 @@ export class WebRTCService {
 
     // ICE 候选事件 - 使用 addEventListener 兼容 react-native-webrtc
     (pc as any).addEventListener('icecandidate', (event: any) => {
-      if (event.candidate && callbacks.onIceCandidate) {
-        callbacks.onIceCandidate(event.candidate);
+      if (event.candidate) {
+        // 检测是否为 IPv6 候选
+        // IPv6 地址包含多个冒号，IPv4 地址最多只有一个冒号（端口号）
+        const candidateStr = event.candidate.candidate || '';
+        const address = event.candidate.address || '';
+        const isIPv6 = address ? (address.split(':').length > 2) : false;
+
+        // IPv6 过滤逻辑
+        if (isIPv6 && !this.enableIPv6) {
+          webrtcLogger.warn('[ICE] IPv6 已禁用：丢弃 IPv6 候选', address);
+          return;
+        }
+
+        if (isIPv6) {
+          webrtcLogger.info('[ICE] IPv6 候选:', {
+            remoteUserId,
+            address,
+            type: event.candidate.type,
+          });
+        }
+
+        if (callbacks.onIceCandidate) {
+          callbacks.onIceCandidate(event.candidate);
+        }
       }
     });
 

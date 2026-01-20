@@ -38,11 +38,13 @@ const SettingsScreen: React.FC = () => {
   const navigation = useNavigation();
   const {
     serverUrl,
+    enableIPv6,
     defaultResolution,
     defaultFrameRate,
     hardwareAcceleration,
     theme,
     setServerUrl,
+    setEnableIPv6,
     setDefaultResolution,
     setDefaultFrameRate,
     setHardwareAcceleration,
@@ -169,6 +171,22 @@ const SettingsScreen: React.FC = () => {
               <Text variant="bodySmall" style={styles.hint}>
                 开发环境使用 10.0.2.2 访问宿主机，真机使用局域网 IP
               </Text>
+
+              <Divider style={styles.divider} />
+
+              {/* IPv6 开关 */}
+              <View style={styles.switchRow}>
+                <View style={styles.switchLabel}>
+                  <Text variant="bodyMedium">启用 IPv6</Text>
+                  <Text variant="bodySmall" style={styles.hint}>
+                    如果双方网络都支持 IPv6，可以绕过 NAT 直接连接，大幅提高成功率
+                  </Text>
+                </View>
+                <Switch
+                  value={enableIPv6}
+                  onValueChange={setEnableIPv6}
+                />
+              </View>
             </Card.Content>
           </Card>
 

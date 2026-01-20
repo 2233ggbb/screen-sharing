@@ -18,6 +18,7 @@ export type Theme = 'light' | 'dark';
 interface SettingsState {
   // 网络设置
   serverUrl: string;
+  enableIPv6: boolean;
 
   // 视频设置
   defaultResolution: Resolution;
@@ -29,6 +30,7 @@ interface SettingsState {
 
   // Actions
   setServerUrl: (url: string) => void;
+  setEnableIPv6: (enabled: boolean) => void;
   setDefaultResolution: (resolution: Resolution) => void;
   setDefaultFrameRate: (frameRate: FrameRate) => void;
   setHardwareAcceleration: (enabled: boolean) => void;
@@ -43,6 +45,7 @@ const DEFAULT_SERVER_URL = __DEV__
 
 const defaultSettings = {
   serverUrl: DEFAULT_SERVER_URL,
+  enableIPv6: true, // 默认启用 IPv6
   defaultResolution: '1080p' as Resolution,
   defaultFrameRate: 30 as FrameRate,
   hardwareAcceleration: true,
@@ -52,9 +55,18 @@ const defaultSettings = {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      ...defaultSettings,
+      // 状态
+      serverUrl: DEFAULT_SERVER_URL,
+      enableIPv6: true,
+      defaultResolution: '1080p' as Resolution,
+      defaultFrameRate: 30 as FrameRate,
+      hardwareAcceleration: true,
+      theme: 'dark' as Theme,
 
+      // Actions
       setServerUrl: (serverUrl: string) => set({ serverUrl }),
+
+      setEnableIPv6: (enableIPv6: boolean) => set({ enableIPv6 }),
 
       setDefaultResolution: (defaultResolution: Resolution) =>
         set({ defaultResolution }),
