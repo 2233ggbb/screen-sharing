@@ -11,7 +11,7 @@ import { RoomService } from '../services/RoomService';
 import { SignalingService } from '../services/SignalingService';
 import { ConnectionHandler } from './handlers/ConnectionHandler';
 import { RoomHandler } from './handlers/RoomHandler';
-import { WebRTCHandler } from './handlers/WebRTCHandler';
+import { WebRTCHandlerEnhanced } from './handlers/WebRTCHandlerEnhanced';
 import { Logger } from '../utils/logger';
 
 /**
@@ -42,7 +42,7 @@ export function initializeSocket(httpServer: HttpServer): SocketIOServer {
   // 创建处理器
   const connectionHandler = new ConnectionHandler(roomService);
   const roomHandler = new RoomHandler(roomService);
-  const webrtcHandler = new WebRTCHandler(roomService, signalingService);
+  const webrtcHandler = new WebRTCHandlerEnhanced(roomService, signalingService, io);
 
   // 处理连接
   io.on('connection', async (socket: Socket) => {
@@ -58,6 +58,11 @@ export function initializeSocket(httpServer: HttpServer): SocketIOServer {
     // 处理断开连接
     socket.on('disconnect', (reason: string) => {
       connectionHandler.handleDisconnect(socket, reason);
+      // 清理 NAT 信息
+      const user = roomService.getUserBySocketId(socket.id);
+      if (user) {
+        webrtcHandler.cleanupUser(user.id);
+      }
     });
 
     // 处理错误
