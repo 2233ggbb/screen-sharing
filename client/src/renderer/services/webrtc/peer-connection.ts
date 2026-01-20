@@ -386,6 +386,21 @@ export class PeerConnectionManager {
       throw new Error(`连接不存在: ${remoteUserId}`);
     }
 
+    // 检查 signaling state
+    logger.debug(`[setRemoteDescription] 当前 signaling state: ${pc.signalingState}, 类型: ${description.type}`);
+
+    // 对于 Answer，需要在 have-local-offer 状态
+    if (description.type === 'answer' && pc.signalingState !== 'have-local-offer') {
+      logger.warn(`无法设置 Answer，当前 state: ${pc.signalingState}，期望: have-local-offer`);
+      return; // 忽略这个 Answer
+    }
+
+    // 对于 Offer，需要在 stable 状态
+    if (description.type === 'offer' && pc.signalingState !== 'stable') {
+      logger.warn(`无法设置 Offer，当前 state: ${pc.signalingState}，期望: stable`);
+      return; // 忽略这个 Offer
+    }
+
     await pc.setRemoteDescription(description);
     logger.info('设置远程描述:', { remoteUserId, type: description.type });
 
