@@ -17,6 +17,7 @@ interface UseRoomSocketOptions {
   onWebRTCAnswer: (data: WebRTCAnswerData) => Promise<void>;
   onIceCandidate: (data: WebRTCIceCandidateData) => Promise<void>;
   onUserLeft: (userId: string) => void;
+  onNewUserJoined: (userId: string) => Promise<void>;
 }
 
 /**
@@ -29,6 +30,7 @@ export function useRoomSocket({
   onWebRTCAnswer,
   onIceCandidate,
   onUserLeft,
+  onNewUserJoined,
 }: UseRoomSocketOptions) {
   const navigate = useNavigate();
   const { userId } = useUserStore();
@@ -52,12 +54,11 @@ export function useRoomSocket({
     async (newUserId: string) => {
       const localStream = useStreamStore.getState().localStream;
       if (localStream) {
-        // 这里通过 onWebRTCOffer 的逆向操作来发送 offer
-        // 实际的发送逻辑在 useRoomWebRTC 中
-        console.log('[useRoomSocket] 需要向新用户发送 offer:', newUserId);
+        console.log('[useRoomSocket] 向新用户发送 offer:', newUserId);
+        await onNewUserJoined(newUserId);
       }
     },
-    []
+    [onNewUserJoined]
   );
 
   /**

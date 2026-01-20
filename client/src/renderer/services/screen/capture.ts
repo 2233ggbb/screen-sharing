@@ -25,6 +25,15 @@ export class ScreenCaptureService {
    */
   async getSources(): Promise<DesktopSource[]> {
     try {
+      // 浏览器环境支持
+      if (!('electron' in window)) {
+        return [{
+          id: 'browser-screen',
+          name: '浏览器屏幕共享',
+          thumbnail: '', // 浏览器无法获取缩略图
+        }];
+      }
+
       const sources = await window.electron.getDesktopSources({
         types: ['screen', 'window'],
         thumbnailSize: { width: 300, height: 200 },
@@ -58,34 +67,45 @@ export class ScreenCaptureService {
       // 停止之前的流
       this.stopCurrentStream();
 
-      // 构建音频约束
-      // Windows 支持系统音频捕获，macOS 需要额外权限
-      const audioConstraints = captureAudio
-        ? {
+      let stream: MediaStream;
+
+      // 浏览器环境
+      if (!('electron' in window)) {
+        stream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: captureAudio,
+        });
+      } else {
+        // Electron 环境
+        // 构建音频约束
+        // Windows 支持系统音频捕获，macOS 需要额外权限
+        const audioConstraints = captureAudio
+          ? {
+              // @ts-ignore - Electron特定的约束
+              mandatory: {
+                chromeMediaSource: 'desktop',
+                chromeMediaSourceId: sourceId,
+              },
+            }
+          : false;
+
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints,
+          video: {
             // @ts-ignore - Electron特定的约束
             mandatory: {
               chromeMediaSource: 'desktop',
               chromeMediaSourceId: sourceId,
+              minWidth: 1280,
+              maxWidth: 1920,
+              minHeight: 720,
+              maxHeight: 1080,
+              minFrameRate: 15,
+              maxFrameRate: 30,
             },
-          }
-        : false;
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraints,
-        video: {
-          // @ts-ignore - Electron特定的约束
-          mandatory: {
-            chromeMediaSource: 'desktop',
-            chromeMediaSourceId: sourceId,
-            minWidth: 1280,
-            maxWidth: 1920,
-            minHeight: 720,
-            maxHeight: 1080,
-            minFrameRate: 15,
-            maxFrameRate: 30,
           },
-        },
-      } as any);
+        } as any);
+      }
 
       this.currentStream = stream;
       logger.info('成功获取屏幕流:', {

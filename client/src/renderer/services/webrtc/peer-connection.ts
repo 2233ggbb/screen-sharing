@@ -153,6 +153,12 @@ export class PeerConnectionManager {
           address: event.candidate.address,
         });
         
+        // TODO: 测试 NAT 穿透时取消注释以下代码块，过滤掉 host 候选
+        // if (candidateType === 'host') {
+        //   console.warn('[ICE] 🚫 模拟非局域网环境：丢弃 host 候选', event.candidate.address);
+        //   return;
+        // }
+
         if (handlers.onIceCandidate) {
           console.log('[ICE] 调用 onIceCandidate 回调发送候选...');
           handlers.onIceCandidate(event.candidate);

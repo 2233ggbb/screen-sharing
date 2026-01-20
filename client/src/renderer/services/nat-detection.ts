@@ -122,20 +122,28 @@ export class NATDetectionClient {
       });
 
       // 显示简短的成功提示
-      const lines = [
-        `NAT 类型: ${natTypeName}`,
-        '',
-        `预计成功率: ${confidence}%`
-      ];
+      // const lines = [
+      //   `NAT 类型: ${natTypeName}`,
+      //   '',
+      //   `预计成功率: ${confidence}%`
+      // ];
 
-      Modal.success({
-        title: '✅ 网络环境检测通过',
-        content: React.createElement('div', null,
-          lines.map((line, i) => React.createElement('div', { key: i }, line || '\u00A0'))
-        ),
-        okText: '继续',
-        width: 400,
-        duration: 3, // 3 秒后自动关闭
+      // Modal.success({
+      //   title: '✅ 网络环境检测通过',
+      //   content: React.createElement('div', null,
+      //     lines.map((line, i) => React.createElement('div', { key: i }, line || '\u00A0'))
+      //   ),
+      //   okText: '继续',
+      //   width: 400,
+      //   // duration: 3, // 3 秒后自动关闭
+      // });
+      
+      // 使用 message 而不是 Modal，以免阻塞 UI 测试
+      import('antd').then(({ message }) => {
+        message.success({
+          content: `✅ NAT检测通过: ${natTypeName} (成功率 ${confidence}%)`,
+          duration: 3,
+        });
       });
     }
   }

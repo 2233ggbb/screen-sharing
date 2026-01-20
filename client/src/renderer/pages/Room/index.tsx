@@ -36,6 +36,20 @@ const Room: React.FC = () => {
     cleanup: cleanupWebRTC,
   } = useRoomWebRTC({ roomId: roomId! });
 
+  /**
+   * 处理新用户加入时发送 offer
+   * 当自己正在共享时，需要向新加入的用户发送 offer
+   */
+  const handleNewUserJoined = useCallback(
+    async (userId: string) => {
+      const localStream = useStreamStore.getState().localStream;
+      if (localStream) {
+        await sendOfferToUser(userId, localStream);
+      }
+    },
+    [sendOfferToUser]
+  );
+
   // 使用 Socket Hook
   const { setupSocketHandlers, leaveRoom, isConnected } = useRoomSocket({
     roomId: roomId!,
@@ -43,6 +57,7 @@ const Room: React.FC = () => {
     onWebRTCAnswer: handleWebRTCAnswer,
     onIceCandidate: handleIceCandidate,
     onUserLeft: closeConnection,
+    onNewUserJoined: handleNewUserJoined,
   });
 
   /**
@@ -79,20 +94,6 @@ const Room: React.FC = () => {
     // 清理函数 - 只在组件真正卸载时执行
     // 注意：不在这里调用 leaveRoom，因为 React Strict Mode 会导致多次挂载/卸载
   }, [roomId, initRoom, navigate]);
-
-  /**
-   * 处理新用户加入时发送 offer
-   * 当自己正在共享时，需要向新加入的用户发送 offer
-   */
-  const handleNewUserJoined = useCallback(
-    async (userId: string) => {
-      const localStream = useStreamStore.getState().localStream;
-      if (localStream) {
-        await sendOfferToUser(userId, localStream);
-      }
-    },
-    [sendOfferToUser]
-  );
 
   /**
    * 离开房间
