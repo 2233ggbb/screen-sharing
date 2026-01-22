@@ -35,7 +35,7 @@ export function useRoomSocket({
   const navigate = useNavigate();
   const { userId } = useUserStore();
   const { addMember, removeMember, updateMember } = useRoomStore();
-  const { addStream, removeStream } = useStreamStore();
+  const { removeStream } = useStreamStore();
 
   // 使用 ref 保存最新的 members，避免闭包陷阱
   const membersRef = useRef(useRoomStore.getState().members);

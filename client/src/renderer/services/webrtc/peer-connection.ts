@@ -1,11 +1,34 @@
 import { RTC_CONFIG, STORAGE_KEYS } from '../../utils/constants';
 import { logger } from '../../utils/logger';
 
+export type WebRTCConnectionStage =
+  | 'createOffer'
+  | 'createAnswer'
+  | 'setLocalDescription'
+  | 'setRemoteDescription'
+  | 'addIceCandidate'
+  | 'iceConnection'
+  | 'connection'
+  | 'iceRestart'
+  | 'unknown';
+
+export interface WebRTCConnectionError {
+  remoteUserId: string;
+  stage: WebRTCConnectionStage;
+  /** 面向用户/诊断的错误信息（尽量可读、可检索） */
+  message: string;
+  name?: string;
+  details?: Record<string, unknown>;
+  timestamp: number;
+}
+
 export type PeerConnectionEventHandler = {
   onIceCandidate?: (candidate: RTCIceCandidate) => void;
   onTrack?: (stream: MediaStream) => void;
   onConnectionStateChange?: (state: RTCPeerConnectionState) => void;
   onIceConnectionStateChange?: (state: RTCIceConnectionState) => void;
+  /** 连接失败/异常的详细原因（用于 UI 提示与诊断） */
+  onConnectionError?: (error: WebRTCConnectionError) => void;
   /** ICE 重启时的回调，需要将新的 Offer 发送给对方 */
   onIceRestart?: (offer: RTCSessionDescriptionInit) => void;
   /** 连接类型变化回调（用于显示是直连还是中继） */
@@ -32,6 +55,18 @@ interface ConnectionState {
   retryCount: number;
   handlers: PeerConnectionEventHandler;
   iceRestartTimer: NodeJS.Timeout | null;
+
+  /** 最近一次上报给 UI 的错误（用于避免刷屏） */
+  lastError: WebRTCConnectionError | null;
+  lastErrorReportedAt: number;
+
+  /** Perfect Negotiation: 本端是否正在创建 Offer（用于处理 glare） */
+  makingOffer: boolean;
+  /** Perfect Negotiation: 本端是否在 glare 时忽略对端 Offer（impolite 端） */
+  ignoreOffer: boolean;
+  /** Perfect Negotiation: 本端在 glare 时是否允许回滚并接受对端 Offer（polite 端） */
+  isPolite: boolean;
+
   /** 连接类型：direct(P2P直连) / relay(TURN中继) / unknown */
   connectionType: 'direct' | 'relay' | 'unknown';
   /** 收集到的本地候选数量（用于诊断） */
@@ -82,6 +117,58 @@ export class PeerConnectionManager {
   }
 
   /**
+   * Perfect Negotiation: 计算本端在该连接中的 polite/impolite 角色（双方必须一致）
+   *
+   * 规则：对同一对 userId，字典序更小的一方为 polite。
+   * 这样可在 glare（双方同时发 offer）时，保证只有一方回滚并接受对端 offer。
+   */
+  private isPolitePeer(remoteUserId: string): boolean {
+    if (!this.localUserId) {
+      // localUserId 未初始化时，Perfect Negotiation 的一致性无法保证（极端时序下可能双方都 polite）
+      logger.warn('localUserId 未初始化，Perfect Negotiation 可能失效', { remoteUserId });
+      return true;
+    }
+    return this.localUserId.localeCompare(remoteUserId) < 0;
+  }
+
+  private reportConnectionError(
+    remoteUserId: string,
+    stage: WebRTCConnectionStage,
+    error: unknown,
+    details: Record<string, unknown> = {}
+  ): void {
+    const connState = this.connectionStates.get(remoteUserId);
+    const message = error instanceof Error ? error.message : String(error);
+    const name = error instanceof Error ? error.name : undefined;
+    const timestamp = Date.now();
+
+    const payload: WebRTCConnectionError = {
+      remoteUserId,
+      stage,
+      message,
+      name,
+      details,
+      timestamp,
+    };
+
+    if (connState) {
+      // 防止刷屏：同 stage 2s 内只上报一次
+      if (
+        connState.lastError &&
+        connState.lastError.stage === stage &&
+        timestamp - connState.lastErrorReportedAt < 2000
+      ) {
+        return;
+      }
+      connState.lastError = payload;
+      connState.lastErrorReportedAt = timestamp;
+    }
+
+    logger.error('WebRTC连接失败诊断', payload);
+    connState?.handlers.onConnectionError?.(payload);
+  }
+
+  /**
    * 创建P2P连接
    */
   createConnection(
@@ -102,6 +189,15 @@ export class PeerConnectionManager {
       retryCount: 0,
       handlers,
       iceRestartTimer: null,
+
+      lastError: null,
+      lastErrorReportedAt: 0,
+
+      // Perfect Negotiation
+      makingOffer: false,
+      ignoreOffer: false,
+      isPolite: this.isPolitePeer(remoteUserId),
+
       connectionType: 'unknown',
       localCandidateCount: 0,
       remoteCandidateCount: 0,
@@ -131,13 +227,13 @@ export class PeerConnectionManager {
         }
 
         // 检测是否为 IPv6 候选
-        // IPv6 地址包含多个冒号，IPv4 地址最多只有一个冒号（端口号）
-        const isIPv6 = event.candidate.address ?
-          (event.candidate.address.split(':').length > 2) : false;
+        // 说明：不同浏览器/环境下 address 可能为空；这里使用更稳健的判定（包含 ::1 / IPv4-mapped IPv6）
+        const candidateAddress = event.candidate.address ?? '';
+        const isIPv6 = Boolean(candidateAddress) && candidateAddress.includes(':');
         
         // IPv6 过滤逻辑
         if (isIPv6 && !this.enableIPv6) {
-          console.warn('[ICE] 🚫 IPv6 已禁用：丢弃 IPv6 候选', event.candidate.address);
+          console.warn('[ICE] 🚫 IPv6 已禁用：丢弃 IPv6 候选', candidateAddress);
           return;
         }
 
@@ -166,12 +262,17 @@ export class PeerConnectionManager {
           address: event.candidate.address,
         });
 
-        // ⚠️ 测试代码：用于模拟非局域网环境，过滤掉 host 候选
-        // 生产环境请注释掉此代码，否则局域网无法直连！
-        // if (candidateType === 'host') {
-        //   console.warn('[ICE] 🚫 模拟非局域网环境：丢弃 host 候选', event.candidate.address);
-        //   return;
-        // }
+        // 调试开关：模拟非局域网环境时可禁用 host 候选（避免误操作，使用开关而非注释代码）
+        const disableHostCandidates =
+          (typeof process !== 'undefined' &&
+            typeof process.env !== 'undefined' &&
+            process.env.DEBUG_DISABLE_HOST_CANDIDATES === 'true') ||
+          localStorage.getItem('debug_disable_host_candidates') === 'true';
+
+        if (disableHostCandidates && candidateType === 'host') {
+          console.warn('[ICE] 🚫 调试模式：丢弃 host 候选', event.candidate.address);
+          return;
+        }
 
         if (handlers.onIceCandidate) {
           console.log('[ICE] 调用 onIceCandidate 回调发送候选...');
@@ -234,6 +335,16 @@ export class PeerConnectionManager {
 
       // ICE 连接失败时尝试重启
       if (state === 'failed') {
+        this.reportConnectionError(remoteUserId, 'iceConnection', new Error('ICE connection failed'), {
+          iceConnectionState: pc.iceConnectionState,
+          iceGatheringState: pc.iceGatheringState,
+          connectionState: pc.connectionState,
+          signalingState: pc.signalingState,
+          localCandidateCount: this.connectionStates.get(remoteUserId)?.localCandidateCount ?? 0,
+          remoteCandidateCount: this.connectionStates.get(remoteUserId)?.remoteCandidateCount ?? 0,
+          retryCount: this.connectionStates.get(remoteUserId)?.retryCount ?? 0,
+        });
+
         console.error(`[ICE] 连接失败 [${remoteUserId}]，可能原因：`);
         console.error('1. 双方都是对称型/端口限制型 NAT，无法直接打洞');
         console.error('2. 防火墙阻止了 UDP 流量');
@@ -287,6 +398,12 @@ export class PeerConnectionManager {
         console.error(`[P2P] connectionState 变为 failed [${remoteUserId}]`);
         // 如果 iceConnectionState 没有触发 handleIceFailure，这里触发
         if (pc.iceConnectionState !== 'failed') {
+          this.reportConnectionError(remoteUserId, 'connection', new Error('PeerConnection connectionState failed'), {
+            iceConnectionState: pc.iceConnectionState,
+            iceGatheringState: pc.iceGatheringState,
+            connectionState: pc.connectionState,
+            signalingState: pc.signalingState,
+          });
           console.log('[P2P] iceConnectionState 未 failed，在此触发 ICE 重启');
           this.handleIceFailure(remoteUserId, pc);
         }
@@ -308,6 +425,10 @@ export class PeerConnectionManager {
     if (!connState) return;
 
     if (connState.retryCount >= this.MAX_RETRY_COUNT) {
+      this.reportConnectionError(remoteUserId, 'iceRestart', new Error('ICE restart reached max retries'), {
+        retryCount: connState.retryCount,
+        maxRetryCount: this.MAX_RETRY_COUNT,
+      });
       console.error(`[ICE] ✗ 重试次数已达上限 [${remoteUserId}]，放弃连接`);
       logger.error(`ICE重试次数已达上限 [${remoteUserId}]，放弃重试`);
       // 最终放弃时才关闭连接
@@ -338,6 +459,9 @@ export class PeerConnectionManager {
           console.warn('[ICE] onIceRestart 回调未设置，无法发送重启 Offer');
         }
       } catch (error) {
+        this.reportConnectionError(remoteUserId, 'iceRestart', error, {
+          retryCount: connState.retryCount,
+        });
         console.error(`[ICE] ICE重启失败:`, error);
         logger.error(`ICE重启失败 [${remoteUserId}]:`, error);
       }
@@ -369,13 +493,26 @@ export class PeerConnectionManager {
       throw new Error(`连接不存在: ${remoteUserId}`);
     }
 
-    const offer = await pc.createOffer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: true,
-    });
-    await pc.setLocalDescription(offer);
-    logger.info('创建Offer:', remoteUserId);
-    return offer;
+    const connState = this.connectionStates.get(remoteUserId);
+
+    try {
+      // Perfect Negotiation：标记正在创建 Offer，用于 glare 冲突判断
+      if (connState) {
+        connState.makingOffer = true;
+      }
+
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true,
+      });
+      await pc.setLocalDescription(offer);
+      logger.info('创建Offer:', remoteUserId);
+      return offer;
+    } finally {
+      if (connState) {
+        connState.makingOffer = false;
+      }
+    }
   }
 
   /**
@@ -406,26 +543,97 @@ export class PeerConnectionManager {
       throw new Error(`连接不存在: ${remoteUserId}`);
     }
 
+    const connState = this.connectionStates.get(remoteUserId);
+
     // 检查 signaling state
-    logger.debug(`[setRemoteDescription] 当前 signaling state: ${pc.signalingState}, 类型: ${description.type}`);
+    logger.debug(
+      `[setRemoteDescription] 当前 signaling state: ${pc.signalingState}, 类型: ${description.type}`
+    );
 
-    // 对于 Answer，需要在 have-local-offer 状态
-    if (description.type === 'answer' && pc.signalingState !== 'have-local-offer') {
-      logger.warn(`无法设置 Answer，当前 state: ${pc.signalingState}，期望: have-local-offer`);
-      return; // 忽略这个 Answer
+    // Perfect Negotiation：处理 glare（双方同时发 Offer）
+    const offerCollision =
+      description.type === 'offer' &&
+      (pc.signalingState !== 'stable' || Boolean(connState?.makingOffer));
+
+    const isPolite = connState?.isPolite ?? this.isPolitePeer(remoteUserId);
+    if (connState) {
+      connState.isPolite = isPolite;
+      // 参考实现：ignoreOffer 应随每次收到 description 重新计算（answer 时会自动归零）
+      connState.ignoreOffer = !isPolite && offerCollision;
     }
 
-    // 对于 Offer，需要在 stable 状态
-    if (description.type === 'offer' && pc.signalingState !== 'stable') {
-      logger.warn(`无法设置 Offer，当前 state: ${pc.signalingState}，期望: stable`);
-      return; // 忽略这个 Offer
+    // impolite 端在 glare 时忽略对端 offer
+    if (offerCollision && !isPolite) {
+      logger.warn(
+        `[PerfectNegotiation] glare 冲突：本端为 impolite，忽略对端 offer。state=${pc.signalingState}`
+      );
+      return;
     }
 
-    await pc.setRemoteDescription(description);
+    try {
+      if (offerCollision && isPolite) {
+        logger.warn(
+          `[PerfectNegotiation] glare 冲突：本端为 polite，执行 rollback 并接受对端 offer。state=${pc.signalingState}`
+        );
+
+        await Promise.all([
+          pc.setLocalDescription({ type: 'rollback' }),
+          pc.setRemoteDescription(description),
+        ]);
+      } else {
+        await pc.setRemoteDescription(description);
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      const errorName =
+        typeof error === 'object' && error !== null && 'name' in error
+          ? String((error as { name?: unknown }).name)
+          : '';
+
+      // 仅在可预期的时序/状态错误时降级忽略；其它错误应升级为 error 并让上层感知
+      const isTimingIssue =
+        errorName === 'InvalidStateError' ||
+        errorMsg.includes('InvalidStateError') ||
+        errorMsg.includes('signaling state') ||
+        errorMsg.includes('stable') ||
+        errorMsg.includes('have-local-offer') ||
+        errorMsg.includes('have-remote-offer');
+
+      if (isTimingIssue) {
+        logger.warn('设置远程描述失败（时序/状态冲突，已忽略）', {
+          remoteUserId,
+          type: description.type,
+          signalingState: pc.signalingState,
+          errorName,
+          errorMsg,
+        });
+        return;
+      }
+
+      logger.error('设置远程描述失败（非时序问题）', {
+        remoteUserId,
+        type: description.type,
+        signalingState: pc.signalingState,
+        errorName,
+        errorMsg,
+        error,
+      });
+
+      this.reportConnectionError(remoteUserId, 'setRemoteDescription', error, {
+        type: description.type,
+        signalingState: pc.signalingState,
+        errorName,
+        errorMsg,
+      });
+
+      // 让上层有机会展示错误/触发重试
+      connState?.handlers.onConnectionStateChange?.('failed');
+      return;
+    }
+
     logger.info('设置远程描述:', { remoteUserId, type: description.type });
 
     // 标记已设置远程描述
-    const connState = this.connectionStates.get(remoteUserId);
     if (connState) {
       connState.hasRemoteDescription = true;
 
@@ -460,6 +668,14 @@ export class PeerConnectionManager {
 
     const connState = this.connectionStates.get(remoteUserId);
 
+    // Perfect Negotiation：若当前正处于 ignoreOffer 状态，则忽略与被拒绝 offer 关联的候选
+    if (connState?.ignoreOffer) {
+      logger.debug('忽略与被拒绝 offer 关联的 ICE 候选（ignoreOffer=true）', {
+        remoteUserId,
+      });
+      return;
+    }
+
     // 如果远程描述还未设置，缓存候选
     if (!connState?.hasRemoteDescription) {
       logger.info('远程描述未设置，缓存ICE候选:', remoteUserId);
@@ -487,6 +703,18 @@ export class PeerConnectionManager {
       });
       logger.debug('添加ICE候选成功:', remoteUserId);
     } catch (error) {
+      // Perfect Negotiation：若处于 ignoreOffer 状态导致候选不可用，按参考实现降级忽略
+      if (connState?.ignoreOffer) {
+        logger.debug('忽略ICE候选（ignoreOffer=true）', { remoteUserId });
+        return;
+      }
+
+      this.reportConnectionError(remoteUserId, 'addIceCandidate', error, {
+        candidate: candidate.candidate?.slice(0, 160),
+        sdpMid: candidate.sdpMid,
+        sdpMLineIndex: candidate.sdpMLineIndex,
+      });
+
       logger.error('添加ICE候选失败:', error);
     }
   }
@@ -711,7 +939,6 @@ export class PeerConnectionManager {
     console.log('%c[WebRTC] ===== 连接诊断信息 =====', 'color: blue; font-weight: bold; font-size: 14px;');
     
     this.peerConnections.forEach((pc, remoteUserId) => {
-      const connState = this.connectionStates.get(remoteUserId);
       const diagnostics = this.getConnectionDiagnostics(remoteUserId);
       
       console.log(`[WebRTC] 连接 [${remoteUserId}]:`, {

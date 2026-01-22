@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import { SocketEvents, ServerEventParams, ServerEvents } from '@shared/events';
+import { SocketEvents } from '@shared/events';
 import type {
   CreateRoomPayload,
   JoinRoomPayload,

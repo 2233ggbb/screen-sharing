@@ -26,11 +26,12 @@ export class NATDetectionService {
 
   constructor() {
     this.logger = new Logger('NATDetection');
-    this.initializeSockets();
+    // 注意：简化检测不需要监听 UDP 端口。
+    // 为避免与 STUN/TURN（常用 3478）等服务端口冲突，UDP 测试端口改为按需初始化。
   }
 
   /**
-   * 初始化 UDP 测试端口
+   * 初始化 UDP 测试端口（仅用于完整版检测）
    */
   private initializeSockets(): void {
     const ports = [this.PRIMARY_PORT, this.SECONDARY_PORT, this.TEST_PORT];
@@ -48,50 +49,84 @@ export class NATDetectionService {
   }
 
   /**
-   * 简化版 NAT 检测（基于 HTTP 请求）
-   * 由于 Web 环境无法直接发送 UDP，我们通过客户端 IP 推断
+   * 确保 UDP 测试端口已初始化（仅供 detectNATTypeFull 使用）
+   */
+  private ensureSocketsInitialized(): void {
+    if (this.sockets.size > 0) return;
+    this.initializeSockets();
+  }
+
+  /**
+   * 简化版 NAT 检测（基于 Socket 连接信息）
+   *
+   * 重要说明：
+   * - 仅凭服务端看到的 clientIp 很难准确判断 NAT 类型（尤其是存在反向代理/IPv6 映射时）。
+   * - 该方法只用于给用户提供“粗略提示”，不能据此改变关键连接时序。
+   * - 为避免误判导致连接成功率下降：简化检测不再默认启用候选“协调缓存”模式。
    */
   async detectNATTypeSimple(clientIp: string): Promise<NATDetectionResult> {
-    this.logger.info(`开始检测 NAT 类型（简化版）: ${clientIp}`);
+    const normalizedIp = this.normalizeClientIp(clientIp);
+    this.logger.info(`开始检测 NAT 类型（简化版）: ${clientIp} -> ${normalizedIp}`);
 
-    // 基于客户端 IP 特征进行推断
-    // 注意：这是简化版，生产环境建议使用完整的 STUN 测试
-
-    // 检查是否为私有地址（可能在 NAT 后）
-    const isPrivate = this.isPrivateIP(clientIp);
+    // 基于客户端 IP 特征进行推断（仅供提示）
+    const isPrivate = this.isPrivateIP(normalizedIp);
 
     if (!isPrivate) {
-      // 公网 IP，不需要 NAT 穿透
+      // 公网 IP（或服务端判断为非私网），大概率不需要 NAT 穿透
       return {
         type: 'full-cone',
         canP2P: true,
-        confidence: 100,
-        publicAddress: { ip: clientIp, port: 0 },
-        recommendation: '✅ 检测到公网 IP，P2P 连接成功率极高。',
+        confidence: 90,
+        publicAddress: { ip: normalizedIp, port: 0 },
+        recommendation: '✅ 检测到非私网地址，P2P 连接成功率较高。',
         requiresSync: false,
       };
     }
 
-    // 默认假设为端口受限型 NAT（最常见的情况）
-    // 实际环境中可以通过客户端发送 UDP 包进行精确检测
+    // 私网地址：说明存在 NAT/代理环境，但无法进一步区分 restricted/port-restricted/symmetric
+    // 为避免误判引入额外时序干预，这里仅做提示，不启用协调缓存。
     return {
       type: 'port-restricted-cone',
       canP2P: true,
-      confidence: 70,
-      publicAddress: { ip: clientIp, port: 0 },
+      confidence: 50,
+      publicAddress: { ip: normalizedIp, port: 0 },
       recommendation:
-        '⚠️ 检测到 NAT 环境，预计为端口受限型。\n系统将启用连接协调模式以提高成功率。',
-      requiresSync: true, // 启用协调模式
+        '⚠️ 检测到私网地址，可能处于 NAT/代理环境。\n将使用标准 Trickle ICE 进行打洞（不启用候选缓存协调）。\n如连接失败，建议切换网络或部署 TURN。',
+      requiresSync: false,
     };
   }
 
   /**
+   * 规范化服务端看到的客户端 IP
+   * - 处理 Socket.IO 常见的 ::ffff:IPv4 映射
+   * - 去掉可能的端口（极端情况下）
+   */
+  private normalizeClientIp(ip: string): string {
+    const withoutPort = ip.includes(':') && ip.includes('.') ? ip : ip.split(':')[0];
+    if (withoutPort.startsWith('::ffff:')) {
+      return withoutPort.replace('::ffff:', '');
+    }
+    return withoutPort;
+  }
+
+  /**
    * 判断是否为私有 IP
+   * - 支持 IPv4 私网段
+   * - 对 IPv6 做最小判断（ULA/link-local/loopback）
    */
   private isPrivateIP(ip: string): boolean {
-    const parts = ip.split('.').map(Number);
+    // IPv6
+    if (ip.includes(':')) {
+      const lower = ip.toLowerCase();
+      if (lower === '::1') return true;
+      if (lower.startsWith('fe80:')) return true; // link-local
+      if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // ULA
+      return false;
+    }
 
-    if (parts.length !== 4) return false;
+    // IPv4
+    const parts = ip.split('.').map(Number);
+    if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) return false;
 
     // 10.0.0.0/8
     if (parts[0] === 10) return true;
@@ -117,6 +152,9 @@ export class NATDetectionService {
     clientPort: number
   ): Promise<NATDetectionResult> {
     this.logger.info(`开始完整 NAT 检测: ${clientIp}:${clientPort}`);
+
+    // 完整检测需要 UDP 端口监听，按需初始化以避免启动时端口冲突
+    this.ensureSocketsInitialized();
 
     try {
       // 测试 1: 从主端口获取映射

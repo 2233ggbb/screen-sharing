@@ -38,7 +38,8 @@ export function showCurrentServer(): void {
 }
 
 // 开发模式下暴露到全局
-if (import.meta.env.DEV) {
+const isDev = typeof process !== 'undefined' ? process.env.NODE_ENV !== 'production' : false;
+if (isDev) {
   (window as any).switchServer = switchServer;
   (window as any).showCurrentServer = showCurrentServer;
   console.log('🛠️ 开发工具已加载：');

@@ -9,7 +9,6 @@ import {
 } from '@ant-design/icons';
 import { useStreamStore } from '../../store/stream';
 import { useUserStore } from '../../store/user';
-import { useRoomStore } from '../../store/room';
 import { screenCaptureService, DesktopSource } from '../../services/screen/capture';
 import { socketService } from '../../services/socket/client';
 import './index.less';
@@ -22,7 +21,7 @@ interface ControlsProps {
 
 const Controls: React.FC<ControlsProps> = ({ roomId, onLeave, onStartSharing }) => {
   const { userId } = useUserStore();
-  const { localStream, setLocalStream, addStream, removeStream, shareSystemAudio, setShareSystemAudio } = useStreamStore();
+  const { setLocalStream, addStream, removeStream, shareSystemAudio, setShareSystemAudio } = useStreamStore();
   const [isSharing, setIsSharing] = useState(false);
   const [sourceModalVisible, setSourceModalVisible] = useState(false);
   const [sources, setSources] = useState<DesktopSource[]>([]);

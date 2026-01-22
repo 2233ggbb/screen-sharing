@@ -1,5 +1,4 @@
 import { logger } from '../../utils/logger';
-import { STREAM_CONSTRAINTS } from '../../utils/constants';
 
 export interface DesktopSource {
   id: string;
@@ -34,7 +33,31 @@ export class ScreenCaptureService {
         }];
       }
 
-      const sources = await window.electron.getDesktopSources({
+      type ElectronDesktopSource = {
+        id: string;
+        name: string;
+        thumbnail: { toDataURL: () => string };
+        display_id?: string;
+        appIcon?: { toDataURL: () => string };
+      };
+
+      type ElectronApi = {
+        getDesktopSources: (opts: {
+          types: Array<'screen' | 'window'>;
+          thumbnailSize: { width: number; height: number };
+        }) => Promise<ElectronDesktopSource[]>;
+      };
+
+      const electronApi = (window as unknown as { electron?: ElectronApi }).electron;
+      if (!electronApi) {
+        return [{
+          id: 'browser-screen',
+          name: '浏览器屏幕共享',
+          thumbnail: '',
+        }];
+      }
+
+      const sources = await electronApi.getDesktopSources({
         types: ['screen', 'window'],
         thumbnailSize: { width: 300, height: 200 },
       });

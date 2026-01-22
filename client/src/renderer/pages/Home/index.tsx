@@ -11,14 +11,13 @@ import { useUserStore } from '../../store/user';
 import { useRoomStore } from '../../store/room';
 import { socketService } from '../../services/socket/client';
 import { natDetector } from '../../services/nat-detection';
-import { STORAGE_KEYS } from '../../utils/constants';
 import './index.less';
 
 const { Title, Text } = Typography;
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
-  const { userId, nickname, setUserId, setNickname, loadFromStorage } = useUserStore();
+  const { nickname, setUserId, setNickname, loadFromStorage } = useUserStore();
   const { setRoomInfo, setMembers } = useRoomStore();
   const [loading, setLoading] = useState(false);
   const [nicknameForm] = Form.useForm();

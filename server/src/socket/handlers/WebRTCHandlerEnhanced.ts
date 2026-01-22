@@ -35,6 +35,8 @@ export class WebRTCHandlerEnhanced {
     }
   >();
 
+  private readonly enableCoordination: boolean;
+
   constructor(
     roomService: RoomService,
     signalingService: SignalingService,
@@ -45,6 +47,10 @@ export class WebRTCHandlerEnhanced {
     this.signalingService = signalingService;
     this.natDetector = new NATDetectionService();
     this.coordinator = new ConnectionCoordinator();
+
+    const raw = String(process.env.ENABLE_ICE_COORDINATION || '').toLowerCase();
+    this.enableCoordination = ['true', '1', 'yes'].includes(raw);
+    this.logger.info(`ICE 协调模式: ${this.enableCoordination ? '启用' : '禁用'}`);
 
     // 保存 io 实例供后续使用
     (this as any).io = io;
@@ -169,13 +175,14 @@ export class WebRTCHandlerEnhanced {
     const otherUsers = roomMembers.filter((u: any) => u.id !== user.id);
 
     // 检查是否需要为这些连接启用协调
+    // 默认关闭：由于简化 NAT 检测误判概率高，且“候选缓存协调”可能降低 Trickle ICE 的成功率。
     const userNAT = this.userNATInfo.get(user.id);
 
     for (const otherUser of otherUsers) {
       const otherNAT = this.userNATInfo.get(otherUser.id);
 
-      // 如果任一方需要协调，就启用协调模式
-      if (userNAT?.requiresSync || otherNAT?.requiresSync) {
+      // 只有在明确启用时才启用协调模式
+      if (this.enableCoordination && (userNAT?.requiresSync || otherNAT?.requiresSync)) {
         this.coordinator.registerConnection(
           user.id,
           socket.id,
@@ -189,6 +196,12 @@ export class WebRTCHandlerEnhanced {
           reason: userNAT?.requiresSync
             ? `${user.id} 需要协调`
             : `${otherUser.id} 需要协调`,
+        });
+      } else {
+        this.logger.debug('未启用协调模式（使用 Trickle ICE 直通）', {
+          enableCoordination: this.enableCoordination,
+          userA: user.id,
+          userB: otherUser.id,
         });
       }
     }

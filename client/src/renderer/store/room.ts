@@ -1,5 +1,14 @@
 import { create } from 'zustand';
-import type { User, RoomInfo } from '@shared/types';
+import type { User } from '@shared/types';
+
+interface RoomInfo {
+  id: string;
+  name: string;
+  ownerId: string;
+  hasPassword: boolean;
+  createdAt: Date;
+  maxMembers: number;
+}
 
 interface RoomMember extends User {
   isSharing: boolean;

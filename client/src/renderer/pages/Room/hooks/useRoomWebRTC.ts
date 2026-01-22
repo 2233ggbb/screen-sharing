@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { message } from 'antd';
 import { PeerConnectionManager } from '../../../services/webrtc/peer-connection';
 import {
   socketService,
@@ -52,7 +53,16 @@ export function useRoomWebRTC({ roomId }: UseRoomWebRTCOptions) {
     async (targetUserId: string, stream: MediaStream) => {
       console.log('[useRoomWebRTC] 开始创建连接并发送Offer to:', targetUserId);
       
-      const pc = peerManager.createConnection(targetUserId, {
+      peerManager.createConnection(targetUserId, {
+        onConnectionError: (error) => {
+          // 连接失败时给用户明确提示：在哪一步失败 + 原因
+          // 这里用 message 直接提示，避免用户只能看控制台。
+          message.error({
+            content: `与 ${targetUserId} 建立连接失败（${error.stage}）：${error.message}`,
+            duration: 5,
+          });
+          console.error('[WebRTC][ConnectionError]', error);
+        },
         onIceCandidate: (candidate) => {
           console.log('[useRoomWebRTC] 本地ICE候选生成，准备发送:', {
             to: targetUserId,
@@ -154,53 +164,67 @@ export function useRoomWebRTC({ roomId }: UseRoomWebRTCOptions) {
         return;
       }
 
-      peerManager.createConnection(data.fromUserId, {
-        onIceCandidate: (candidate) => {
-          console.log('[useRoomWebRTC] 本地ICE候选生成(Answer端)，发送:', {
-            to: data.fromUserId,
-            type: candidate.type,
-          });
-          socketService.sendIceCandidate({
-            roomId,
-            from: userId,
-            to: data.fromUserId,
-            targetUserId: data.fromUserId,
-            candidate,
-          });
-        },
-        onTrack: (remoteStream) => {
-          console.log('[useRoomWebRTC] 收到远程流 from:', data.fromUserId);
-          const member = membersRef.current.find((m) => m.id === data.fromUserId);
-          addStream({
-            userId: data.fromUserId,
-            stream: remoteStream,
-            nickname: member?.nickname || 'Unknown',
-            isLocal: false,
-          });
-        },
-        // Answer 端一般不主动发起 ICE 重启，但留着以防万一
-        onIceRestart: async (offer) => {
-          console.log('[useRoomWebRTC] ICE重启(Answer端)，发送新Offer to:', data.fromUserId);
-          await socketService.sendOffer({
-            roomId,
-            from: userId,
-            to: data.fromUserId,
-            targetUserId: data.fromUserId,
-            offer: {
-              type: offer.type as 'offer' | 'answer',
-              sdp: offer.sdp!,
-            },
-          });
-        },
-        // ICE 收集完成回调 - Answer 端也需要通知
-        onIceGatheringComplete: (target, connectionId) => {
-          console.log('[useRoomWebRTC] ICE 收集完成(Answer端)，通知服务器:', {
-            target,
-            connectionId,
-          });
-          socketService.notifyIceGatheringComplete(target, connectionId);
-        },
-      });
+      // 重要：如果连接已存在（例如双方同时发起 Offer 产生 glare），不要重建连接，
+      // 否则会打断本地正在进行的协商/ICE 状态，导致更高概率连接失败。
+      const existingPc = peerManager.getConnection(data.fromUserId);
+      if (!existingPc) {
+        peerManager.createConnection(data.fromUserId, {
+          onConnectionError: (error) => {
+            message.error({
+              content: `与 ${data.fromUserId} 建立连接失败（${error.stage}）：${error.message}`,
+              duration: 5,
+            });
+            console.error('[WebRTC][ConnectionError]', error);
+          },
+          onIceCandidate: (candidate) => {
+            console.log('[useRoomWebRTC] 本地ICE候选生成(Answer端)，发送:', {
+              to: data.fromUserId,
+              type: candidate.type,
+            });
+            socketService.sendIceCandidate({
+              roomId,
+              from: userId,
+              to: data.fromUserId,
+              targetUserId: data.fromUserId,
+              candidate,
+            });
+          },
+          onTrack: (remoteStream) => {
+            console.log('[useRoomWebRTC] 收到远程流 from:', data.fromUserId);
+            const member = membersRef.current.find((m) => m.id === data.fromUserId);
+            addStream({
+              userId: data.fromUserId,
+              stream: remoteStream,
+              nickname: member?.nickname || 'Unknown',
+              isLocal: false,
+            });
+          },
+          // Answer 端一般不主动发起 ICE 重启，但留着以防万一
+          onIceRestart: async (offer) => {
+            console.log('[useRoomWebRTC] ICE重启(Answer端)，发送新Offer to:', data.fromUserId);
+            await socketService.sendOffer({
+              roomId,
+              from: userId,
+              to: data.fromUserId,
+              targetUserId: data.fromUserId,
+              offer: {
+                type: offer.type as 'offer' | 'answer',
+                sdp: offer.sdp!,
+              },
+            });
+          },
+          // ICE 收集完成回调 - Answer 端也需要通知
+          onIceGatheringComplete: (target, connectionId) => {
+            console.log('[useRoomWebRTC] ICE 收集完成(Answer端)，通知服务器:', {
+              target,
+              connectionId,
+            });
+            socketService.notifyIceGatheringComplete(target, connectionId);
+          },
+        });
+      } else {
+        console.log('[useRoomWebRTC] 连接已存在，复用现有 PeerConnection:', data.fromUserId);
+      }
 
       // 转换类型：RTCSessionDescriptionData -> RTCSessionDescriptionInit
       const offerInit: RTCSessionDescriptionInit = {

@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Layout, message, Spin } from 'antd';
 import { useRoomStore } from '../../store/room';
 import { useStreamStore } from '../../store/stream';
-import { socketService } from '../../services/socket/client';
 import { useRoomWebRTC } from './hooks/useRoomWebRTC';
 import { useRoomSocket } from './hooks/useRoomSocket';
 import VideoGrid from '../../components/VideoGrid';
