@@ -101,7 +101,21 @@ export function useRoomSocket({
       // 用户停止共享
       onUserStopSharing: (data) => {
         updateMember(data.userId, { isSharing: false });
-        removeStream(data.userId);
+
+        // 如果当前处于“焦点模式”且焦点正是停止共享的用户，清理焦点，避免 UI 显示空白画面。
+        const { focusedStreamUserId, setFocusedStream } = useStreamStore.getState();
+        if (focusedStreamUserId === data.userId) {
+          setFocusedStream(null);
+        }
+
+        // 关键：对端停止共享时，不要 removeStream（更不要 stop 远端 tracks）。
+        // 多次共享场景下，发送端通常通过 replaceTrack 复用同一 PeerConnection，
+        // 接收端不会再次触发 ontrack。
+        // 如果这里把远端 stream 从 store 移除，就会导致“对方重新开始共享后本端看不到”。
+        if (data.userId === userId) {
+          // 自己停止共享：移除本地流卡片
+          removeStream(data.userId);
+        }
       },
 
       // WebRTC Offer - data 已经是正确类型，直接传递

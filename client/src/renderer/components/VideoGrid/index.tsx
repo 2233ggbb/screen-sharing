@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, memo, useCallback, useState } from 'react';
 import { Empty, Button, Tooltip } from 'antd';
 import { VideoCameraOutlined, FullscreenOutlined, FullscreenExitOutlined } from '@ant-design/icons';
+import { useRoomStore } from '../../store/room';
 import { useStreamStore } from '../../store/stream';
 import './index.less';
 
@@ -14,6 +15,16 @@ const VideoGrid: React.FC = () => {
   const setFocusedStream = useStreamStore((state) => state.setFocusedStream);
   const isFullscreen = useStreamStore((state) => state.isFullscreen);
   const setIsFullscreen = useStreamStore((state) => state.setIsFullscreen);
+  const members = useRoomStore((state) => state.members);
+
+  // 关键：远端用户停止共享后，可能会复用同一条 WebRTC receiver track 再次开始共享。
+  // 此时不会再次触发 ontrack 事件，因此不能把远端 stream 彻底销毁/stop。
+  // 我们仅根据 members.isSharing 来决定“是否展示”。
+  const visibleStreams = streams.filter((streamInfo) => {
+    if (streamInfo.isLocal) return true;
+    const member = members.find((m) => m.id === streamInfo.userId);
+    return member?.isSharing ?? true;
+  });
 
   // 监听浏览器全屏状态变化，同步到 store
   useEffect(() => {
@@ -26,7 +37,7 @@ const VideoGrid: React.FC = () => {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, [setIsFullscreen]);
 
-  if (streams.length === 0) {
+  if (visibleStreams.length === 0) {
     return (
       <div className="video-grid-empty">
         <Empty
@@ -39,8 +50,8 @@ const VideoGrid: React.FC = () => {
 
   // 焦点模式
   if (focusedStreamUserId) {
-    const focusedStream = streams.find((s) => s.userId === focusedStreamUserId);
-    const otherStreams = streams.filter((s) => s.userId !== focusedStreamUserId);
+    const focusedStream = visibleStreams.find((s) => s.userId === focusedStreamUserId);
+    const otherStreams = visibleStreams.filter((s) => s.userId !== focusedStreamUserId);
 
     return (
       <div className="video-grid-focus">
@@ -79,7 +90,7 @@ const VideoGrid: React.FC = () => {
 
   // 网格模式 - 根据屏幕数量动态调整
   const getGridClass = () => {
-    const count = streams.length;
+    const count = visibleStreams.length;
     if (count === 1) {
       return 'video-grid grid-1x1';
     } else if (count <= 4) {
@@ -93,7 +104,7 @@ const VideoGrid: React.FC = () => {
 
   return (
     <div className={getGridClass()}>
-      {streams.map((streamInfo) => (
+      {visibleStreams.map((streamInfo) => (
         <div
           key={streamInfo.userId}
           className="grid-item"

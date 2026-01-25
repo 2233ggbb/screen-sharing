@@ -5,6 +5,13 @@ import { setupIpcHandlers } from './ipc';
 // 是否为开发模式
 const isDev = process.env.NODE_ENV === 'development';
 
+// 修复 Windows WGC "Source is not capturable" 问题
+// 禁用 Chromium 的内容保护,允许窗口被 Windows Graphics Capture API 捕获
+app.commandLine.appendSwitch('disable-features', 'HardwareMediaKeyHandling,MediaSessionService');
+app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer');
+// 允许窗口内容被屏幕捕获
+app.commandLine.appendSwitch('disable-gpu-sandbox');
+
 let mainWindow: BrowserWindow | null = null;
 
 /**
@@ -25,12 +32,18 @@ function createWindow() {
       webSecurity: isDev,
     },
     show: false,
+    // 确保窗口在任务栏可见,有助于屏幕捕获 API 正确识别
+    skipTaskbar: false,
   });
 
   // 窗口准备好后显示
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
   });
+
+  // 设置窗口内容可以被捕获（修复 Windows WGC 黑屏问题）
+  // 必须在窗口创建后设置,允许屏幕共享 API 捕获此窗口
+  mainWindow.setContentProtection(false);
 
   // 监听渲染进程的控制台消息,便于调试打包后的问题
   mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {

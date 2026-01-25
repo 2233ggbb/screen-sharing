@@ -484,22 +484,44 @@ export class PeerConnectionManager {
     // - m-line 顺序错乱（如果不断 addTrack 产生新 transceiver）
     stream.getTracks().forEach((track) => {
       const senders = pc.getSenders();
+      const transceivers = pc.getTransceivers();
 
-      // 1) 同一个 track 已经被 addTrack 过：直接跳过
+      // 1) 同一个 track 已经被 addTrack/replaceTrack 过：直接跳过
       if (senders.some((s) => s.track?.id === track.id)) {
         logger.debug('track 已存在，跳过重复 addTrack:', { remoteUserId, trackKind: track.kind });
         return;
       }
 
-      // 2) 已存在同 kind 的 sender：优先 replaceTrack，避免新增 m-line
+      // 2) 优先复用既有 sender/transceiver（避免新增 m-line）
+      // - sender.track.kind 匹配：说明之前已经发送过该 kind，直接 replaceTrack
+      // - 某些情况下（之前 createOffer 使用了 offerToReceive* 或远端先发 offer），本端可能存在 receiver.kind 对应的 transceiver，
+      //   但 sender.track 为空（recvonly/inactive）。此时也应该复用它，否则 addTrack 会新建 transceiver 导致 m-line 顺序变化。
       const sameKindSender = senders.find((s) => s.track?.kind === track.kind);
-      if (sameKindSender) {
-        void sameKindSender
+      const transceiverWithSameKind =
+        !sameKindSender
+          ? transceivers.find(
+              (t) => t.receiver?.track?.kind === track.kind && !t.sender.track
+            )
+          : undefined;
+
+      const reusableSender = sameKindSender ?? transceiverWithSameKind?.sender;
+      if (reusableSender) {
+        // 如果该 transceiver 之前是 recvonly/inactive，需要切到 sendrecv 才能真正发出 track
+        if (
+          transceiverWithSameKind &&
+          (transceiverWithSameKind.direction === 'recvonly' ||
+            transceiverWithSameKind.direction === 'inactive')
+        ) {
+          transceiverWithSameKind.direction = 'sendrecv';
+        }
+
+        void reusableSender
           .replaceTrack(track)
           .then(() => {
             logger.debug('replaceTrack 成功:', {
               remoteUserId,
               trackKind: track.kind,
+              reused: transceiverWithSameKind ? 'transceiver' : 'sender',
             });
           })
           .catch((error) => {
@@ -550,10 +572,10 @@ export class PeerConnectionManager {
         connState.makingOffer = true;
       }
 
-      const offer = await pc.createOffer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: true,
-      });
+      // 不要使用 offerToReceiveAudio/offerToReceiveVideo：
+      // 这些 legacy 选项可能会隐式创建 recvonly transceiver，导致后续 m-line 顺序发生变化，
+      // 从而触发 "The order of m-lines... doesn't match"（停止共享后再次共享的典型问题）。
+      const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       logger.info('创建Offer:', remoteUserId);
       return offer;
@@ -675,9 +697,11 @@ export class PeerConnectionManager {
         errorMsg,
       });
 
-      // 让上层有机会展示错误/触发重试
+      // 让上层有机会展示错误/触发重试（例如 m-line mismatch 时重建连接）
       connState?.handlers.onConnectionStateChange?.('failed');
-      return;
+
+      // 重要：非时序错误需要抛出，让上层能感知并做兜底处理。
+      throw error;
     }
 
     logger.info('设置远程描述:', { remoteUserId, type: description.type });

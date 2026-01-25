@@ -54,11 +54,15 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   }),
   
   removeStream: (userId) => set((state) => {
-    const stream = state.streams.find((s) => s.userId === userId);
-    if (stream?.stream) {
-      // 停止所有tracks
-      stream.stream.getTracks().forEach((track) => track.stop());
+    const streamInfo = state.streams.find((s) => s.userId === userId);
+
+    // 仅停止本地采集的 tracks。
+    // 远端 tracks 由 WebRTC 引擎管理：这里主动 stop 可能导致后续复用同一 PeerConnection
+    //（replaceTrack / 重新协商）时无法恢复画面（表现为重新共享后对方看不到）。
+    if (streamInfo?.isLocal) {
+      streamInfo.stream.getTracks().forEach((track) => track.stop());
     }
+
     return {
       streams: state.streams.filter((s) => s.userId !== userId),
       focusedStreamUserId:
@@ -86,16 +90,18 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   
   reset: () => {
     const { streams, localStream } = get();
-    
-    // 停止所有流
+
+    // 仅停止本地采集流；远端流会随着 PeerConnection 关闭而自然结束。
     streams.forEach((s) => {
-      s.stream.getTracks().forEach((track) => track.stop());
+      if (s.isLocal) {
+        s.stream.getTracks().forEach((track) => track.stop());
+      }
     });
-    
+
     if (localStream) {
       localStream.getTracks().forEach((track) => track.stop());
     }
-    
+
     set(initialState);
   },
 }));

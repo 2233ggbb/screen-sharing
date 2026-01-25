@@ -238,7 +238,88 @@ export function useRoomWebRTC({ roomId }: UseRoomWebRTCOptions) {
         type: data.offer.type,
         sdp: data.offer.sdp,
       };
-      await peerManager.setRemoteDescription(data.fromUserId, offerInit);
+
+      // 兜底：若因 m-line 顺序不一致等“非时序问题”导致 setRemoteDescription 失败，
+      // 说明该 PeerConnection 的 transceiver/m-line 已经与对端不再一致。
+      // 此时最稳妥的做法是关闭并重建连接，然后再处理该 offer。
+      try {
+        await peerManager.setRemoteDescription(data.fromUserId, offerInit);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        const isMLineMismatch =
+          errMsg.includes('m-lines') ||
+          errMsg.includes('mline') ||
+          errMsg.includes('order') ||
+          errMsg.includes('doesn\'t match order');
+
+        if (isMLineMismatch) {
+          console.warn('[useRoomWebRTC] setRemoteDescription m-line mismatch，重建连接后重试:', {
+            fromUserId: data.fromUserId,
+            errMsg,
+          });
+
+          peerManager.closeConnection(data.fromUserId);
+
+          // 重建连接
+          peerManager.createConnection(data.fromUserId, {
+            onConnectionError: (err) => {
+              message.error({
+                content: `与 ${data.fromUserId} 建立连接失败（${err.stage}）：${err.message}`,
+                duration: 5,
+              });
+              console.error('[WebRTC][ConnectionError]', err);
+            },
+            onIceCandidate: (candidate) => {
+              console.log('[useRoomWebRTC] 本地ICE候选生成(Answer端-重建后)，发送:', {
+                to: data.fromUserId,
+                type: candidate.type,
+              });
+              socketService.sendIceCandidate({
+                roomId,
+                from: userId,
+                to: data.fromUserId,
+                targetUserId: data.fromUserId,
+                candidate,
+              });
+            },
+            onTrack: (remoteStream) => {
+              console.log('[useRoomWebRTC] 收到远程流(重建后) from:', data.fromUserId);
+              const member = membersRef.current.find((m) => m.id === data.fromUserId);
+              addStream({
+                userId: data.fromUserId,
+                stream: remoteStream,
+                nickname: member?.nickname || 'Unknown',
+                isLocal: false,
+              });
+            },
+            onIceRestart: async (offer) => {
+              console.log('[useRoomWebRTC] ICE重启(Answer端-重建后)，发送新Offer to:', data.fromUserId);
+              await socketService.sendOffer({
+                roomId,
+                from: userId,
+                to: data.fromUserId,
+                targetUserId: data.fromUserId,
+                offer: {
+                  type: offer.type as 'offer' | 'answer',
+                  sdp: offer.sdp!,
+                },
+              });
+            },
+            onIceGatheringComplete: (target, connectionId) => {
+              console.log('[useRoomWebRTC] ICE 收集完成(Answer端-重建后)，通知服务器:', {
+                target,
+                connectionId,
+              });
+              socketService.notifyIceGatheringComplete(target, connectionId);
+            },
+          });
+
+          // 重试设置远端描述
+          await peerManager.setRemoteDescription(data.fromUserId, offerInit);
+        } else {
+          throw error;
+        }
+      }
 
       // 如果自己正在共享，添加本地流
       const localStream = useStreamStore.getState().localStream;
