@@ -478,9 +478,58 @@ export class PeerConnectionManager {
       return;
     }
 
+    // 重要：多人共享/重复协商场景下，addStream 可能会被多次调用。
+    // 需要保证幂等，否则会触发：
+    // - InvalidAccessError: A sender already exists for the track
+    // - m-line 顺序错乱（如果不断 addTrack 产生新 transceiver）
     stream.getTracks().forEach((track) => {
-      pc.addTrack(track, stream);
-      logger.debug('添加track到连接:', { remoteUserId, trackKind: track.kind });
+      const senders = pc.getSenders();
+
+      // 1) 同一个 track 已经被 addTrack 过：直接跳过
+      if (senders.some((s) => s.track?.id === track.id)) {
+        logger.debug('track 已存在，跳过重复 addTrack:', { remoteUserId, trackKind: track.kind });
+        return;
+      }
+
+      // 2) 已存在同 kind 的 sender：优先 replaceTrack，避免新增 m-line
+      const sameKindSender = senders.find((s) => s.track?.kind === track.kind);
+      if (sameKindSender) {
+        void sameKindSender
+          .replaceTrack(track)
+          .then(() => {
+            logger.debug('replaceTrack 成功:', {
+              remoteUserId,
+              trackKind: track.kind,
+            });
+          })
+          .catch((error) => {
+            logger.warn('replaceTrack 失败，将尝试 addTrack 兜底:', {
+              remoteUserId,
+              trackKind: track.kind,
+              error,
+            });
+            try {
+              pc.addTrack(track, stream);
+              logger.debug('addTrack 兜底成功:', { remoteUserId, trackKind: track.kind });
+            } catch (e) {
+              logger.error('addTrack 兜底失败:', {
+                remoteUserId,
+                trackKind: track.kind,
+                error: e,
+              });
+            }
+          });
+        return;
+      }
+
+      // 3) 首次发送该 kind：正常 addTrack
+      try {
+        pc.addTrack(track, stream);
+        logger.debug('添加track到连接:', { remoteUserId, trackKind: track.kind });
+      } catch (error) {
+        // 避免未捕获异常打断协商流程
+        logger.error('添加track到连接失败:', { remoteUserId, trackKind: track.kind, error });
+      }
     });
   }
 

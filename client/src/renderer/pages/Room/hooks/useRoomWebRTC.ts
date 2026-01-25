@@ -52,69 +52,76 @@ export function useRoomWebRTC({ roomId }: UseRoomWebRTCOptions) {
   const sendOfferToUser = useCallback(
     async (targetUserId: string, stream: MediaStream) => {
       console.log('[useRoomWebRTC] 开始创建连接并发送Offer to:', targetUserId);
-      
-      peerManager.createConnection(targetUserId, {
-        onConnectionError: (error) => {
-          // 连接失败时给用户明确提示：在哪一步失败 + 原因
-          // 这里用 message 直接提示，避免用户只能看控制台。
-          message.error({
-            content: `与 ${targetUserId} 建立连接失败（${error.stage}）：${error.message}`,
-            duration: 5,
-          });
-          console.error('[WebRTC][ConnectionError]', error);
-        },
-        onIceCandidate: (candidate) => {
-          console.log('[useRoomWebRTC] 本地ICE候选生成，准备发送:', {
-            to: targetUserId,
-            type: candidate.type,
-            address: candidate.address,
-            port: candidate.port,
-          });
-          socketService.sendIceCandidate({
-            roomId,
-            from: userId,
-            to: targetUserId,
-            targetUserId,
-            candidate,
-          });
-        },
-        onTrack: (remoteStream) => {
-          console.log('[useRoomWebRTC] 收到远程流:', targetUserId);
-          const member = membersRef.current.find((m) => m.id === targetUserId);
-          addStream({
-            userId: targetUserId,
-            stream: remoteStream,
-            nickname: member?.nickname || 'Unknown',
-            isLocal: false,
-          });
-        },
-        // ICE 重启回调 - 发送新的 Offer 给对方
-        onIceRestart: async (offer) => {
-          console.log('[useRoomWebRTC] ICE重启，发送新Offer to:', targetUserId);
-          await socketService.sendOffer({
-            roomId,
-            from: userId,
-            to: targetUserId,
-            targetUserId,
-            offer: {
-              type: offer.type as 'offer' | 'answer',
-              sdp: offer.sdp!,
-            },
-          });
-        },
-        // ICE 收集完成回调 - 通知服务器进行协调
-        onIceGatheringComplete: (target, connectionId) => {
-          console.log('[useRoomWebRTC] ICE 收集完成，通知服务器协调:', {
-            target,
-            connectionId,
-          });
-          socketService.notifyIceGatheringComplete(target, connectionId);
-        },
-      });
 
-      console.log('[useRoomWebRTC] PeerConnection 已创建，添加本地流...');
+      // 关键：多人共享场景下，双方可能已存在 PeerConnection（例如之前已在接收对方的共享）。
+      // 如果这里直接重建连接，会导致：
+      // 1) 原有远程流 track 被中断（表现为黑屏）
+      // 2) 对端仍持有旧的 m-line 顺序，新 Offer 用新 PC 的 m-line 顺序会触发 InvalidAccessError
+      // 所以：仅在连接不存在时才创建。
+      const existingPc = peerManager.getConnection(targetUserId);
+      if (!existingPc) {
+        peerManager.createConnection(targetUserId, {
+          onConnectionError: (error) => {
+            message.error({
+              content: `与 ${targetUserId} 建立连接失败（${error.stage}）：${error.message}`,
+              duration: 5,
+            });
+            console.error('[WebRTC][ConnectionError]', error);
+          },
+          onIceCandidate: (candidate) => {
+            console.log('[useRoomWebRTC] 本地ICE候选生成，准备发送:', {
+              to: targetUserId,
+              type: candidate.type,
+              address: candidate.address,
+              port: candidate.port,
+            });
+            socketService.sendIceCandidate({
+              roomId,
+              from: userId,
+              to: targetUserId,
+              targetUserId,
+              candidate,
+            });
+          },
+          onTrack: (remoteStream) => {
+            console.log('[useRoomWebRTC] 收到远程流:', targetUserId);
+            const member = membersRef.current.find((m) => m.id === targetUserId);
+            addStream({
+              userId: targetUserId,
+              stream: remoteStream,
+              nickname: member?.nickname || 'Unknown',
+              isLocal: false,
+            });
+          },
+          onIceRestart: async (offer) => {
+            console.log('[useRoomWebRTC] ICE重启，发送新Offer to:', targetUserId);
+            await socketService.sendOffer({
+              roomId,
+              from: userId,
+              to: targetUserId,
+              targetUserId,
+              offer: {
+                type: offer.type as 'offer' | 'answer',
+                sdp: offer.sdp!,
+              },
+            });
+          },
+          onIceGatheringComplete: (target, connectionId) => {
+            console.log('[useRoomWebRTC] ICE 收集完成，通知服务器协调:', {
+              target,
+              connectionId,
+            });
+            socketService.notifyIceGatheringComplete(target, connectionId);
+          },
+        });
+      } else {
+        console.log('[useRoomWebRTC] 连接已存在，复用现有 PeerConnection:', targetUserId);
+      }
+
+      console.log('[useRoomWebRTC] 添加/更新本地流到 PeerConnection...');
       peerManager.addStream(targetUserId, stream);
-      console.log('[useRoomWebRTC] 本地流已添加，创建 Offer...');
+
+      console.log('[useRoomWebRTC] 创建 Offer...');
       const offer = await peerManager.createOffer(targetUserId);
       console.log('[useRoomWebRTC] Offer 已创建，发送中...');
 

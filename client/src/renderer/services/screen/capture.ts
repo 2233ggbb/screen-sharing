@@ -86,62 +86,119 @@ export class ScreenCaptureService {
   ): Promise<MediaStream> {
     const { captureAudio = false } = options;
 
-    try {
-      // 停止之前的流
-      this.stopCurrentStream();
+    // 停止之前的流
+    this.stopCurrentStream();
 
-      let stream: MediaStream;
+    type ElectronDesktopMandatoryConstraints = {
+      mandatory: {
+        chromeMediaSource: 'desktop';
+        chromeMediaSourceId: string;
+        minWidth?: number;
+        maxWidth?: number;
+        minHeight?: number;
+        maxHeight?: number;
+        minFrameRate?: number;
+        maxFrameRate?: number;
+      };
+    };
 
+    type ElectronDesktopTrackConstraints = MediaTrackConstraints & ElectronDesktopMandatoryConstraints;
+
+    const getErrorName = (err: unknown): string | undefined => {
+      if (typeof err === 'object' && err !== null && 'name' in err) {
+        const name = (err as { name?: unknown }).name;
+        return typeof name === 'string' ? name : undefined;
+      }
+      return undefined;
+    };
+
+    const getErrorMessage = (err: unknown): string => {
+      if (err instanceof Error) return err.message;
+      if (typeof err === 'object' && err !== null && 'message' in err) {
+        const message = (err as { message?: unknown }).message;
+        return typeof message === 'string' ? message : String(err);
+      }
+      return String(err);
+    };
+
+    const isAudioStartError = (err: unknown): boolean => {
+      const name = getErrorName(err);
+      const message = getErrorMessage(err);
+      return name === 'NotReadableError' || message.includes('Could not start audio source');
+    };
+
+    const createStream = async (withAudio: boolean): Promise<MediaStream> => {
       // 浏览器环境
       if (!('electron' in window)) {
-        stream = await navigator.mediaDevices.getDisplayMedia({
+        return await navigator.mediaDevices.getDisplayMedia({
           video: true,
-          audio: captureAudio,
+          audio: withAudio,
         });
-      } else {
-        // Electron 环境
-        // 构建音频约束
-        // Windows 支持系统音频捕获，macOS 需要额外权限
-        const audioConstraints = captureAudio
-          ? {
-              // @ts-ignore - Electron特定的约束
-              mandatory: {
-                chromeMediaSource: 'desktop',
-                chromeMediaSourceId: sourceId,
-              },
-            }
-          : false;
+      }
 
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: audioConstraints,
-          video: {
-            // @ts-ignore - Electron特定的约束
+      // Electron 环境
+      // 说明：系统音频捕获在 macOS 上通常不可用（需虚拟声卡/额外能力），因此上层可能会降级为仅视频。
+      const audioConstraints: ElectronDesktopTrackConstraints | false = withAudio
+        ? {
             mandatory: {
               chromeMediaSource: 'desktop',
               chromeMediaSourceId: sourceId,
-              minWidth: 1280,
-              maxWidth: 1920,
-              minHeight: 720,
-              maxHeight: 1080,
-              minFrameRate: 15,
-              maxFrameRate: 30,
             },
-          },
-        } as any);
-      }
+          }
+        : false;
 
-      this.currentStream = stream;
-      logger.info('成功获取屏幕流:', {
-        sourceId,
-        captureAudio,
-        videoTracks: stream.getVideoTracks().length,
-        audioTracks: stream.getAudioTracks().length,
+      const videoConstraints: ElectronDesktopTrackConstraints = {
+        mandatory: {
+          chromeMediaSource: 'desktop',
+          chromeMediaSourceId: sourceId,
+          minWidth: 1280,
+          maxWidth: 1920,
+          minHeight: 720,
+          maxHeight: 1080,
+          minFrameRate: 15,
+          maxFrameRate: 30,
+        },
+      };
+
+      return await navigator.mediaDevices.getUserMedia({
+        audio: audioConstraints,
+        video: videoConstraints,
       });
-      return stream;
+    };
+
+    const captureAudioRequested = captureAudio;
+    let captureAudioUsed = captureAudio;
+
+    let stream: MediaStream;
+
+    try {
+      stream = await createStream(captureAudioRequested);
     } catch (error) {
-      logger.error('获取屏幕流失败:', error);
-      throw error;
+      // 常见场景：开启“共享系统音频”后，音频源无法启动（macOS / 无可用设备 / 被占用）
+      if (captureAudioRequested && isAudioStartError(error)) {
+        captureAudioUsed = false;
+        logger.warn('系统音频捕获失败，已降级为仅视频:', {
+          sourceId,
+          errorName: getErrorName(error),
+          errorMessage: getErrorMessage(error),
+        });
+        stream = await createStream(false);
+      } else {
+        logger.error('获取屏幕流失败:', error);
+        throw error;
+      }
     }
+
+    this.currentStream = stream;
+    logger.info('成功获取屏幕流:', {
+      sourceId,
+      captureAudioRequested,
+      captureAudioUsed,
+      videoTracks: stream.getVideoTracks().length,
+      audioTracks: stream.getAudioTracks().length,
+    });
+
+    return stream;
   }
 
   /**

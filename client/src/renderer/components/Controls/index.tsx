@@ -48,6 +48,11 @@ const Controls: React.FC<ControlsProps> = ({ roomId, onLeave, onStartSharing }) 
       const stream = await screenCaptureService.getStreamFromSource(sourceId, {
         captureAudio: shareSystemAudio,
       });
+
+      // 如果用户要求系统音频但最终没有拿到音轨，给出非阻断提示（capture.ts 内会自动降级）
+      if (shareSystemAudio && stream.getAudioTracks().length === 0) {
+        message.warning('系统音频不可用，已仅共享画面');
+      }
       
       // 获取选中的源信息
       const selectedSource = sources.find(s => s.id === sourceId);

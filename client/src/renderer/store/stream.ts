@@ -26,11 +26,15 @@ interface StreamState {
   reset: () => void;
 }
 
+const defaultShareSystemAudio =
+  typeof navigator !== 'undefined' && /Windows/i.test(navigator.userAgent);
+
 const initialState = {
   streams: [] as StreamInfo[],
   localStream: null as MediaStream | null,
   focusedStreamUserId: null as string | null,
-  shareSystemAudio: true, // 默认开启系统音频共享
+  // 系统音频捕获在 Windows 支持更好；其它平台默认关闭，避免触发 NotReadableError
+  shareSystemAudio: defaultShareSystemAudio,
   isFullscreen: false,
 };
 
